@@ -169,3 +169,51 @@ _所有时长字段导出时格式化为 `HH:MM`。如果是 SIMULATOR 记录，
 > 🎨 **【交互设计师 UI/UX】 - 🟢 GO** “Export 页面提供两个清晰的引导按钮（PDF 打印版 / Excel 备份版），对用户心智的教育非常友好。录入页面的纯数字键盘和智能推算大幅降低了交互摩擦。”
 
 > 🔬 **【高级测试工程师 QA】 - 🟢 GO** “合规红线公式 `PIC+SIC+Dual+Inst <= Block` 和 跨零点逻辑极其清晰。后续基于这份 PRD 编写自动化测试脚本将非常顺畅。无阻碍，同意放行。”
+
+## 🗺️八、开发路径 (Development Roadmap)
+
+基于专家讨论，制定了以下 5 个阶段（Sprints）的开发路径。请严格按照这个顺序推进，可以最大程度避免代码重构：
+
+#### 📍 Phase 1: 基础设施与本地数据库 (Infrastructure & Local DB) - _重中之重_
+
+-   **步骤 1**：初始化 Expo 项目 (`npx create-expo-app pilot-logbook -t expo-template-blank-typescript`)。
+    
+-   **步骤 2**：配置 Babel 和 WatermelonDB 的底层原生依赖。
+    
+-   **步骤 3**：编写 `schema.ts`，严格按照 PRD 的数据字典（使用 `INTEGER` 存分钟数，建立双轨大宽表）。
+    
+-   **步骤 4**：编写 `LogbookRecord.ts` Model 类，定义增删改查的方法。
+    
+
+#### 📍 Phase 2: 核心引擎与算法库 (Core Engines & Utils) - _剥离业务逻辑_
+
+-   **步骤 1**：编写时间换算引擎 `TimeUtils.ts` (实现 `0830` 转 `08:30`，以及 `HH:MM` 转 `Integer` 分钟)。
+    
+-   **步骤 2**：编写跨日计算引擎 `FlightMath.ts` (实现 `ON - OFF` 跨零点推算，以及 `OFF = TO - 10m` 逻辑)。
+    
+-   **步骤 3**：编写合规校验引擎 `ComplianceValidator.ts` (实现 `PIC+SIC+Dual+Inst <= Block` 的布尔值判断)。
+    
+
+#### 📍 Phase 3: UI 界面与双轨表单搭建 (UI & Dual-Track Forms)
+
+-   **步骤 1**：搭建全局路由 (React Navigation)，包含：首页(Dashboard)、列表页(Timeline)、录入页(Entry Form)、设置/导出页。
+    
+-   **步骤 2**：开发录入页的**动态双轨表单**。实现顶部 `[FLIGHT / SIMULATOR]` 切换时，下方组件的动态渲染与脏数据清洗。
+    
+-   **步骤 3**：封装并接入 `MaskedTimeInput` 纯数字键盘组件。
+    
+
+#### 📍 Phase 4: 90天看板与本地导出闭环 (Dashboard & Local Export)
+
+-   **步骤 1**：开发 90 天合规 Dashboard，从 WatermelonDB 实时查询过去 90 天数据，渲染红黄绿警示卡片。
+    
+-   **步骤 2**：集成 `expo-print`，编写 HTML/CSS 报表模板，将 SQLite 数据遍历注入，实现 PDF 一键生成与分享。
+    
+-   **步骤 3**：集成 `SheetJS`，实现 Excel 数据备份文件生成。
+    
+
+#### 📍 Phase 5: API 代理与智能拉取 (API Proxy & Polish)
+
+-   **步骤 1**：在本地/云端搭建极简的 Node.js/Express 代理服务，对接 OpenSky/航空接口，加入 Redis 缓存和 3 秒熔断。
+    
+-   **步骤 2**：App 端接入 API 查询逻辑，实现输入航班号后的静默补全与 Bottom Sheet 航段选择。
