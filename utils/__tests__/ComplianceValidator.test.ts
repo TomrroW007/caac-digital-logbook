@@ -137,6 +137,57 @@ describe('validateFlightRecord', () => {
             expect(result.valid).toBe(false);
         });
     });
+
+    describe('special time bounds (FLIGHT mode only)', () => {
+        it('passes when nightFlightMin equals blockTimeMin (at limit)', () => {
+            const result = validateFlightRecord({ ...validBase, picMin: 0, sicMin: 0, nightFlightMin: 150 });
+            expect(result.valid).toBe(true);
+        });
+
+        it('fails when nightFlightMin exceeds blockTimeMin', () => {
+            const result = validateFlightRecord({ ...validBase, picMin: 0, sicMin: 0, nightFlightMin: 200 });
+            expect(result.valid).toBe(false);
+            expect(result.errors.some(e => e.code === 'SPECIAL_TIME_EXCEEDS_BLOCK' && e.field === 'night_flight_min')).toBe(true);
+        });
+
+        it('passes when instrumentMin equals blockTimeMin (at limit)', () => {
+            const result = validateFlightRecord({ ...validBase, picMin: 0, sicMin: 0, instrumentMin: 150 });
+            expect(result.valid).toBe(true);
+        });
+
+        it('fails when instrumentMin exceeds blockTimeMin', () => {
+            const result = validateFlightRecord({ ...validBase, picMin: 0, sicMin: 0, instrumentMin: 151 });
+            expect(result.valid).toBe(false);
+            expect(result.errors.some(e => e.code === 'SPECIAL_TIME_EXCEEDS_BLOCK' && e.field === 'instrument_min')).toBe(true);
+        });
+
+        it('does NOT apply special time bounds to SIMULATOR records', () => {
+            // SIM records can have large nightFlightMin/instrumentMin values without failing
+            const result = validateFlightRecord({
+                ...validBase,
+                dutyType: 'SIMULATOR',
+                picMin: 0,
+                sicMin: 0,
+                nightFlightMin: 9999,
+                instrumentMin: 9999,
+            });
+            // Should only fail if role sum exceeds block — not for special times on SIM
+            expect(result.errors.some(e => e.code === 'SPECIAL_TIME_EXCEEDS_BLOCK')).toBe(false);
+        });
+
+        it('collects both special time errors alongside role-sum errors', () => {
+            const result = validateFlightRecord({
+                ...validBase,
+                picMin: 80,
+                sicMin: 80,       // role sum = 160 > 150 → ROLE_TIME_EXCEEDS_BLOCK
+                nightFlightMin: 200, // > 150 → SPECIAL_TIME_EXCEEDS_BLOCK (night)
+                instrumentMin: 200,  // > 150 → SPECIAL_TIME_EXCEEDS_BLOCK (instrument)
+            });
+            expect(result.valid).toBe(false);
+            expect(result.errors.some(e => e.code === 'ROLE_TIME_EXCEEDS_BLOCK')).toBe(true);
+            expect(result.errors.some(e => e.code === 'SPECIAL_TIME_EXCEEDS_BLOCK')).toBe(true);
+        });
+    });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

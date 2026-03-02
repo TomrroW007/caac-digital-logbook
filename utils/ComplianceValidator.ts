@@ -181,6 +181,28 @@ export function validateFlightRecord(data: FlightRecordInput): ValidationResult 
         });
     }
 
+    // ── Special time bounds (FLIGHT mode only) ────────────────────────────────
+    // Night and instrument times may overlap with block time but cannot
+    // logically exceed the total block time.
+
+    if (data.dutyType === 'FLIGHT' && data.nightFlightMin > data.blockTimeMin) {
+        errors.push({
+            field: 'night_flight_min',
+            message:
+                `夜航时间 (${data.nightFlightMin} 分钟) 不能超过总时长 (${data.blockTimeMin} 分钟)。`,
+            code: 'SPECIAL_TIME_EXCEEDS_BLOCK',
+        });
+    }
+
+    if (data.dutyType === 'FLIGHT' && data.instrumentMin > data.blockTimeMin) {
+        errors.push({
+            field: 'instrument_min',
+            message:
+                `仪表时间 (${data.instrumentMin} 分钟) 不能超过总时长 (${data.blockTimeMin} 分钟)。`,
+            code: 'SPECIAL_TIME_EXCEEDS_BLOCK',
+        });
+    }
+
     return {
         valid: errors.length === 0,
         errors,

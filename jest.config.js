@@ -28,9 +28,6 @@ module.exports = {
         ],
     },
 
-    // Path aliases — none yet; will be added when Expo project is initialized.
-    moduleNameMapper: {},
-
     // Mock WatermelonDB so its native modules don't break the test runner.
     // The TimeCalculator tests don't use WatermelonDB at all, but schema.ts
     // and LogbookRecord.ts import from it — this mock satisfies those imports.

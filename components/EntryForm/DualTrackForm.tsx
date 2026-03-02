@@ -663,9 +663,9 @@ export const DualTrackForm: React.FC<Props> = ({
 
                     {/* Role & Approach */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>输入角色与进运进类型</Text>
+                        <Text style={styles.sectionTitle}>飞行角色与进近类型</Text>
                         <OptionPicker
-                            label="居位角色 Pilot Role"
+                            label="飞行角色 Pilot Role"
                             value={flight.pilotRole}
                             onChange={v => updateFlight({ pilotRole: v as 'PF' | 'PM' | '' })}
                             options={[
@@ -675,7 +675,7 @@ export const DualTrackForm: React.FC<Props> = ({
                             testID="picker-pilot-role"
                         />
                         <OptionPicker
-                            label="进运进类型 Approach Type"
+                            label="进近类型 Approach Type"
                             value={flight.approachType}
                             onChange={v => updateFlight({ approachType: v })}
                             options={APPROACH_TYPE_OPTIONS}
@@ -706,7 +706,7 @@ export const DualTrackForm: React.FC<Props> = ({
                     {/* Special Times */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>特殊时间 Special Times</Text>
-                        <Text style={styles.sectionHint}>夜航和仓乱时间与 Block Time 可重叠，不入局方合规公式计算</Text>
+                        <Text style={styles.sectionHint}>夜航和仪表时间与 Block Time 可重叠，不入局方合规公式计算</Text>
                         <View style={styles.row}>
                             <View style={styles.roleTimeField}>
                                 <Text style={styles.inputLabel}>夜航 Night (分)</Text>
@@ -721,7 +721,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                 />
                             </View>
                             <View style={styles.roleTimeField}>
-                                <Text style={styles.inputLabel}>仓乱 Instrument (分)</Text>
+                                <Text style={styles.inputLabel}>仪表 Instrument (分)</Text>
                                 <TextInput
                                     style={styles.textInput}
                                     value={flight.instrumentRaw}

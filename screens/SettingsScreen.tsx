@@ -37,30 +37,71 @@ import { minutesToHHMM } from '../utils/TimeCalculator';
 // ─── PDF HTML Generation ──────────────────────────────────────────────────────
 
 function generateLogbookHtml(records: LogbookRecord[]): string {
-    const rowsHtml = records.map(r => `
+    // PRD §5.3: For SIMULATOR records, flight-only columns (Route, Total Time,
+    // Day/Night Ldg, Approach) are blank; block_time_min goes into the Sim Time column.
+    const rowsHtml = records.map(r => {
+        const isFlight = r.dutyType === 'FLIGHT';
+        return `
     <tr>
       <td>${r.schdDate}</td>
       <td>${r.actlDate}</td>
       <td>${r.acftType}</td>
       <td>${r.regNo ?? ''}</td>
-      <td>${r.dutyType === 'FLIGHT' ? (r.routeString || '—') : (r.simNo ?? r.simCat ?? '模拟机')}</td>
+      <td>${isFlight ? (r.routeString || '—') : ''}</td>
       <td>${r.offTimeUtc ? r.offTimeUtc.slice(11, 16) : ''}</td>
       <td>${r.toTimeUtc  ? r.toTimeUtc.slice(11, 16)  : ''}</td>
       <td>${r.ldgTimeUtc ? r.ldgTimeUtc.slice(11, 16) : ''}</td>
       <td>${r.onTimeUtc  ? r.onTimeUtc.slice(11, 16)  : ''}</td>
-      <td>${minutesToHHMM(r.blockTimeMin)}</td>
+      <td>${isFlight ? minutesToHHMM(r.blockTimeMin) : ''}</td>
       <td>${minutesToHHMM(r.picMin)}</td>
       <td>${minutesToHHMM(r.sicMin)}</td>
       <td>${minutesToHHMM(r.dualMin)}</td>
       <td>${minutesToHHMM(r.instructorMin)}</td>
       <td>${r.nightFlightMin > 0 ? minutesToHHMM(r.nightFlightMin) : ''}</td>
       <td>${r.instrumentMin > 0  ? minutesToHHMM(r.instrumentMin)  : ''}</td>
-      <td>${r.dayLdg > 0   ? r.dayLdg   : ''}</td>
-      <td>${r.nightLdg > 0 ? r.nightLdg : ''}</td>
-      <td>${r.pilotRole ?? ''}</td>
-      <td>${r.approachType ?? ''}</td>
+      <td>${isFlight && r.dayLdg > 0   ? r.dayLdg   : ''}</td>
+      <td>${isFlight && r.nightLdg > 0 ? r.nightLdg : ''}</td>
+      <td>${isFlight ? (r.pilotRole ?? '') : ''}</td>
+      <td>${isFlight ? (r.approachType ?? '') : ''}</td>
+      <td>${!isFlight ? minutesToHHMM(r.blockTimeMin) : ''}</td>
       <td>${r.exportRemarks}</td>
-    </tr>`).join('');
+    </tr>`;
+    }).join('');
+
+    // PRD §5.1: Grand-total row (合计)
+    const totalBlockFlight = records
+        .filter(r => r.dutyType === 'FLIGHT')
+        .reduce((s, r) => s + r.blockTimeMin, 0);
+    const totalBlockSim = records
+        .filter(r => r.dutyType === 'SIMULATOR')
+        .reduce((s, r) => s + r.blockTimeMin, 0);
+    const totalPic  = records.reduce((s, r) => s + r.picMin, 0);
+    const totalSic  = records.reduce((s, r) => s + r.sicMin, 0);
+    const totalDual = records.reduce((s, r) => s + r.dualMin, 0);
+    const totalInst = records.reduce((s, r) => s + r.instructorMin, 0);
+    const totalNight = records.reduce((s, r) => s + r.nightFlightMin, 0);
+    const totalInstrument = records.reduce((s, r) => s + r.instrumentMin, 0);
+    const totalDayLdg   = records.filter(r => r.dutyType === 'FLIGHT').reduce((s, r) => s + r.dayLdg, 0);
+    const totalNightLdg = records.filter(r => r.dutyType === 'FLIGHT').reduce((s, r) => s + r.nightLdg, 0);
+
+    const totalRow = `
+    <tr class="total-row">
+      <td colspan="4" style="text-align:right;font-weight:bold;">合计 Total</td>
+      <td></td>
+      <td colspan="4"></td>
+      <td>${totalBlockFlight > 0 ? minutesToHHMM(totalBlockFlight) : ''}</td>
+      <td>${minutesToHHMM(totalPic)}</td>
+      <td>${minutesToHHMM(totalSic)}</td>
+      <td>${minutesToHHMM(totalDual)}</td>
+      <td>${minutesToHHMM(totalInst)}</td>
+      <td>${totalNight > 0 ? minutesToHHMM(totalNight) : ''}</td>
+      <td>${totalInstrument > 0 ? minutesToHHMM(totalInstrument) : ''}</td>
+      <td>${totalDayLdg > 0 ? totalDayLdg : ''}</td>
+      <td>${totalNightLdg > 0 ? totalNightLdg : ''}</td>
+      <td></td><td></td>
+      <td>${totalBlockSim > 0 ? minutesToHHMM(totalBlockSim) : ''}</td>
+      <td></td>
+    </tr>`;
 
     return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -75,6 +116,7 @@ function generateLogbookHtml(records: LogbookRecord[]): string {
     th    { background: #1e3a5f; color: #fff; font-size: 7pt; padding: 3px 2px; text-align: center; border: 1px solid #999; }
     td    { padding: 2px 2px; text-align: center; border: 1px solid #ccc; font-size: 7.5pt; }
     tr:nth-child(even) { background: #f5f8ff; }
+    tr.total-row td { background: #e8f0fe; font-weight: bold; border-top: 2px solid #1e3a5f; }
     .sig  { margin-top: 20px; display: flex; justify-content: space-between; }
     .sig-box { border-top: 1px solid #333; width: 200px; padding-top: 4px; font-size: 8pt; color: #555; }
   </style>
@@ -86,19 +128,20 @@ function generateLogbookHtml(records: LogbookRecord[]): string {
     <thead>
       <tr>
         <th>计划日期</th><th>实际日期</th><th>机型</th><th>注册号</th>
-        <th>航段/机型</th>
+        <th>航段 Route</th>
         <th>OFF UTC</th><th>TO UTC</th><th>LDG UTC</th><th>ON UTC</th>
-        <th>Block</th><th>PIC</th><th>SIC</th><th>带飞</th><th>教员</th>
+        <th>飞行时间 Total</th><th>PIC</th><th>SIC</th><th>带飞</th><th>教员</th>
         <th>夜航</th><th>仪表</th><th>昼落</th><th>夜落</th>
-        <th>角色</th><th>进近类型</th><th>备注</th>
+        <th>角色</th><th>进近类型</th>
+        <th>模拟机时间 Sim</th><th>备注</th>
       </tr>
     </thead>
-    <tbody>${rowsHtml}</tbody>
+    <tbody>${rowsHtml}${totalRow}</tbody>
   </table>
   <div class="sig">
-    <div class="sig-box">飞行员签字 Pilot Signature</div>
-    <div class="sig-box">教员签字 Instructor Signature</div>
-    <div class="sig-box">审核人签字 Check Signature</div>
+    <div class="sig-box">飞行员签字 Pilot Signature ______</div>
+    <div class="sig-box">教员签字 Instructor Signature ______</div>
+    <div class="sig-box">审核人签字 Check Signature ______</div>
   </div>
 </body>
 </html>`;
