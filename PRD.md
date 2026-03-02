@@ -1,130 +1,167 @@
 # ✈️ 民航飞行员专属 LOGBOOK 产品需求文档 (PRD) V1.0
 
-**文档版本**：V1.0 (最终核准版) 
 
-**面向对象**：研发团队 (前端/后端/DBA)、测试团队 (QA)、UI/UX 设计师
+**文档状态**：已彻底冻结 (Frozen) - 研发团队可直接开工
 
-**核心原则**：离线优先 (Offline-First)、CAAC/ICAO 规章合规、极简录入
+**目标受众**：全栈独立开发者 (Solo Developer)
+
+**核心原则**：离线 100% 可用、全量 LT 极简录入、分钟制整数存储、动态双轨表单、严格映射 CAAC 纸质本。
 
 ## 一、 产品概述 (Product Overview)
 
 ### 1.1 背景与痛点
 
-传统纸质飞行经历记录本存在携带不便、跨时区时长计算易错、难以实时统计“90天近期经历”以保持资质等痛点。市面上现有的部分工具要么过于臃肿，要么不符合中国民航局 (CAAC) 的精细化填报规范。
+传统纸质飞行经历记录本存在携带不便、跨时区时长计算易错、难以实时统计“90天近期经历”以保持资质等痛点。市面工具缺乏对 CAAC (CCAR-61部) 精细化填报的本土化支持。
 
-### 1.2 产品目标
+### 1.2 产品目标 (V1.0 范围)
 
-打造一款纯粹、专业、供飞行员个人使用的电子 LOGBOOK。通过“第三方开源 API 智能拉取 + 离线本地存储 + 渐进式表单”的组合，实现秒级录入与合规预警，并支持一键导出符合局方标准的 Excel 报表。
+打造一款专业供飞行员个人使用的电子 LOGBOOK。
+
+**V1.0 核心战略**：**砍掉复杂的云端多端同步，主打“纯本地极致体验 + 一键 Excel 导出闭环”**。通过第三方 API 智能拉取、纯数字免冒号输入、离线时区库，实现秒级合规录入。
 
 ## 二、 系统架构设计 (System Architecture)
 
-> 👨‍💻 **Tech Lead 审阅批注**：本系统严禁客户端直连外部开源 API（规避 Key 泄露与 IP 封禁）。必须走后端代理与 Redis 缓存。核心数据必须优先落盘本地 SQLite。
-
 **核心架构规范**：
 
-1.  **离线优先 (Offline-First)**：所有增删改查动作直接与本地 SQLite/IndexedDB 交互，确保机舱断网环境下 100% 可用。
+1.  **离线优先 (Offline-First)**：所有操作 100% 读写本地 SQLite (WatermelonDB)。
     
-2.  **静默同步 (Silent Sync)**：网络恢复后，本地 `sync_status = 0` 的增量数据通过后台队列推送到云端 MySQL 进行备份。采用“最后修改时间优先 (Last Write Wins)”解决多端冲突。
+2.  **分钟制存储引擎 (Minute-Based Storage)**：为彻底杜绝浮点数精度丢失，数据库所有时长（如 Block Time, PIC Time）**一律采用 `INTEGER` 存储绝对分钟数**（例：2小时30分存为 `150`），仅在前端展示与导出时格式化为 `X:XX`。
     
-3.  **API 缓存代理 (Proxy & Cache)**：获取航班号信息的请求发往自有后端，后端先查询 Redis（24小时缓存），未命中再请求 OpenSky 等开源接口。
+3.  **内置离线时区库**：App 本地必须打包一份《全球主要机场 ICAO 对应时区字典(JSON)》，确保断网时用户输入的当地时间 (LT) 能精准转换为 UTC 落盘。
+    
+4.  **API 缓存代理 (Proxy & Cache)**：严禁客户端直连开源航班 API。需通过自有 Node.js 后端代理转发并使用 Redis 缓存，超时 3000ms 强制熔断降级手工模式。
+    
+5.  **云端同步为 V1.1 预留**：V1.0 不做同步，但本地数据库 Schema 必须按同步标准建立（包含 UUID, `is_deleted`, `last_modified_at` 等）。
 
-## 三、 核心业务流程 (Core User Flows)
+## 三、 动态双轨交互与核心业务流程 (Dual-Track UI & Flows)
 
-### 3.1 极简录入流 (Happy Path - 依赖网络)
+系统采用**状态记忆机制**，自动记忆用户上次选择的 `DUTY` 与 `A/C Type`。
 
-1.  用户进入录入页，输入 `计划日期 (SCHD DATE)` 和 `航班号 (FLT NO.)`。
+### 3.1 顶级全局控件
+
+-   **DUTY 选择器**：首列展现，单选 `[ FLIGHT (真实飞行) ]` 或 `[ SIMULATOR (模拟机) ]`。切换时自动清空非当前模式的脏数据。
     
-2.  系统请求接口，若为直飞，静默带出起降机场、机型、撤/挡轮挡时间；若为经停（多航段），底部弹出“航段选择器”供用户选择。
-    
-3.  前端自动计算出总飞行时长 (Block Time)。
-    
-4.  用户展开“经历时间面板”，输入机长(PIC)/副驾(SIC)时间及昼夜落地数，点击保存。
+-   **时区切换器**：全局 `[ LT (当地时间) ] / [ UTC ]`。**默认常驻 LT**，输入框视觉显示均为当地时间。
     
 
-### 3.2 手工兜底流 (Fallback Path - 断网/查无航班)
+### 3.2 FLIGHT (真实飞行) 模式视图
 
-1.  若 API 请求超时 (>3000ms) 或处于断网模式，系统提示“已切换至手工模式”。
+-   **免冒号时间输入**：所有时间输入框唤起**纯数字键盘**（如输入 0830 自动格式化为 08:30）。
     
-2.  用户手动填写起降机场 (ICAO) 及所有时间（UTC），系统依旧自动计算时长。
-
-## 四、 核心功能模块需求 (Functional Requirements)
-
-### 4.1 数据录入与管理模块 (Data Entry)
-
--   **时区处理**：底层强制以 UTC 时间戳计算和存储。前端提供 `[LT / UTC]` 视觉切换开关，根据机场 ICAO 代码自动推算 LT (当地时间) 供用户核对。
+-   **四点时间轴与智能推算**：
     
--   **渐进式 UI 面板**：
-    
-    -   默认常驻：日期、航班号、起降机场、撤/挡轮挡时间、总飞行时长、起降次数。
+    -   `OFF (撤轮挡)` / `TO (起飞)` / `LDG (落地)` / `ON (挡轮挡)`
         
-    -   折叠区域（点击展开）：机长 (PIC)、副驾驶 (SIC)、带飞 (Dual)、教员 (Instructor)、仪表 (Instrument)、夜航 (Night)。
+    -   **自动推算**：若 `TO` 和 `LDG` 有值且 `OFF/ON` 为空，系统静默推算：`OFF = TO - 10分钟`，`ON = LDG + 5分钟`。
         
--   **防错校验 (合规红线)**：点击保存时，前端强制校验：`PIC + SIC + Dual + Instructor <= 总飞行时长`。若超出，阻断保存并标红提示。
-    
--   **软删除机制**：用户在列表左滑删除记录时，本地数据库标记 `is_deleted = 1`，列表隐藏，待联网时同步云端。
-    
-
-### 4.2 数据看板模块 (Dashboard)
-
--   **90天近期经历监控**：
-    
-    -   触发基准：取设备当前所在时区的“自然日零点”。
+    -   **跨零点自适应**：若后一节点数值小于前一节点，系统自动按 +24 小时跨日计算。
         
-    -   计算逻辑：动态回溯过去 90 天，累加 `is_deleted = 0` 的记录中的昼间落地数与夜间落地数。
-        
-    -   UI 预警：总数 <= 3 次时，图标变黄；= 0 次时，图标变红。
-        
--   **累计数据汇总**：展示用户的历史总飞行时间、本月已飞时间。
+-   **专业字段**：`PIC / SIC` (附加 PF/PM 选择)、`Day/Night LDG`、`TYPE OF APP (进近类型)`。
     
 
-### 4.3 局方标准 Excel 导出模块 (Export)
+### 3.3 SIMULATOR (模拟机) 模式视图
 
--   **纯本地生成**：不依赖后端，前端通过本地 DB 数据直接利用 JS/原生库生成 `.xlsx` 文件。
+切换至此模式时，视图重构：
+
+-   **专属字段**：`SIM No. (编号)`、`SIM CAT (等级)`、`Training Agency (训练机构)`、`Training Type (训练类型)`。
     
--   **CAAC 列头映射规则**：
+-   **时间控件**：复用底层表结构，展示为 `From (起始)` / `To (结束)`。系统自动计算 `Duty Time`。
+
+## 四、 核心合规防呆与 Dashboard (Compliance & Dashboard)
+
+### 4.1 合规校验红线 (Blocker)
+
+点击保存时，前端强制校验：
+
+> `pic_min + sic_min + dual_min + instructor_min <= block_time_min`
+> 
+> _(若各项经历时间之和大于总时长，直接标红阻断保存，防止局方审查判定造假)_
+
+### 4.2 Dashboard 数据物理隔离
+
+-   **90天近期经历监控**：取设备当前时区的自然日零点回溯 90 天。仅累加 `DUTY = FLIGHT` 且 `is_deleted = 0` 的记录。**昼/夜间落地任一项 $\le$ 3 次触发黄牌预警，= 0 触发红牌。**
     
-    -   `Date` -> `actl_date`
-        
-    -   `Type` -> `acft_type`
-        
-    -   `Reg No.` -> `reg_no`
-        
-    -   `Route` -> `dep_icao` to `arr_icao`
-        
-    -   `Total Time` -> `block_time`
-        
-    -   分列展示经历时间：`PIC`, `SIC`, `Dual`, `Instructor`, `Instrument`, `Night`。
-        
-    -   分列展示起降：`Day Landings`, `Night Landings`。
+-   **时长隔离**：“真实飞行总时长”与“模拟机总时长”在首页分为两个独立卡片，严禁混合相加。
 
-## 五、 数据字典与底层结构 (Data Dictionary)
+## 五、 数据字典与底层结构 (Data Dictionary V1.0)
 
-> 👨‍⚖️ **DBA 审阅批注**：主键必须用 UUID 防止离线自增冲突。时间统一使用 DATETIME (UTC)。
+> 👨‍⚖️ **DBA 批注**：单表大宽表设计。废弃原 DECIMAL 方案，时长全面上 INTEGER 分钟制。
 
-| **字段名 (Field)** | **含义 (Name)** | **类型 (Type)** | **属性** | **备注 (Remarks)** |  
-|---|---|---|---|---|  
-| `id` | 唯一主键 | VARCHAR(36) | 必填 | 客户端生成的 UUID |  
-| `user_id` | 用户ID | VARCHAR(36) | 必填 | 关联用户账号体系 |  
-| `flight_no` | 航班号 | VARCHAR(10) | 选填 | 例：CA1501 |  
-| `schd_date` | 计划日期 | DATE | 必填 | 用于排班比对 |  
-| `actl_date` | 实际日期 | DATE | 必填 | Excel 导出 90 天计算基准 |  
-| `dep_icao` | 起飞机场 | CHAR(4) | 必填 | 例：ZBAA |  
-| `arr_icao` | 降落机场 | CHAR(4) | 必填 | 例：ZSSS |  
-| `out_time_utc` | 撞轮档 (UTC) | DATETIME | 必填 | 跨零点计算基准 |  
-| `in_time_utc` | 挡轮档 (UTC) | DATETIME | 必填 | 晚于 out_time_utc |  
-| `block_time` | 总飞行时长 | DECIMAL(5,1) | 必填 | 前端只读，系统相减生成 |  
-| `pic_time` | 机长时间 | DECIMAL(5,1) | 必填 | 默认 0.0 |  
-| `sic_time` | 副驾时间 | DECIMAL(5,1) | 必填 | 默认 0.0 |  
-| `day_landings` | 昼间落地 | TINYINT | 必填 | 默认 0 |  
-| `night_landings` | 夜间落地 | TINYINT | 必填 | 默认 0 |  
-| `is_deleted` | 软删除标记 | TINYINT(1) | 必填 | 1=已删除，0=正常（默认） |  
-| `last_modified` | 最后修改时间 | DATETIME | 必填 | 解决多端覆盖冲突的核心依据 |  
-| `sync_status` | 本地同步状态 | TINYINT(1) | 必填 | 仅客户端存在。0=待同步，1=已同步 |
+| 字段名 (Field) | 数据库类型 | 约束 | 业务映射与说明 (Business Rules) |
+|---|---|---|---|
+| id | VARCHAR(36) | 必填 | 客户端生成的 UUID |
+| duty_type | VARCHAR(20) | 必填 | 枚举：FLIGHT / SIMULATOR |
+| flight_no | VARCHAR(10) | 选填 | 航班号，如 CA1501 |
+| schd_date | DATE | 必填 | 计划日期（排班比对） |
+| actl_date | DATE | 必填 | 实际日期（Dashboard 90天检索基准） |
+| acft_type | VARCHAR(20) | 必填 | 机型（A320等，带记忆） |
+| dep_icao / arr_icao | CHAR(4) | 选填 | 起降机场。SIM 模式存 NULL |
+| off_time_utc | DATETIME | 必填 | 撤轮挡 (SIM 模式复用为 From) |
+| to_time_utc | DATETIME | 选填 | 起飞 (Takeoff)。SIM 模式存 NULL |
+| ldg_time_utc | DATETIME | 选填 | 落地 (Landing)。SIM 模式存 NULL |
+| on_time_utc | DATETIME | 必填 | 挡轮挡 (SIM 模式复用为 To) |
+| block_time_min | INTEGER | 必填 | 总时长(分钟)。前端相减生成，不可手填 |
+| pic_min / sic_min | INTEGER | 必填 | 机长/副驾时间(分钟)。默认 0 |
+| dual_min / instructor_min | INTEGER | 必填 | 带飞/教员时间(分钟)。默认 0 |
+| pilot_role | VARCHAR(10) | 选填 | PF 或 PM |
+| approach_type | VARCHAR(20) | 选填 | 进近类型 (ILS, VOR 等) |
+| sim_no / sim_cat | VARCHAR(50) | 选填 | 模拟机编号/等级。FLIGHT 模式存 NULL |
+| day_ldg / night_ldg | TINYINT | 必填 | 昼/夜落地数。默认 0 |
+| remarks | TEXT | 选填 | 自定义备注 |
+| is_deleted | BOOLEAN | 必填 | 软删除标记，默认 False |
+| last_modified_at | DATETIME | 必填 | 最后修改时间 (UTC) |
+| sync_status | VARCHAR(20) | 必填 | 预留：LOCAL_ONLY (V1.0 默认值) |
 
-## 六、 非功能性需求与约束 (Non-Functional Requirements)
 
-1.  **API 超时熔断**：外部航班查询接口的最大等待时间为 **3000ms**。超时必须立刻释放 UI 线程，进入手工模式。
+## 六、 CAAC 标准纸质本 Excel 导出映射表 (Export Mapping)
+
+纯本地通过 JS 库生成，严格对齐局方标准列头。时长字段导出时统一格式化为 `HH:MM`
+
+| 序号 | 纸质本标准列头 | 数据源映射字段 | 格式化规范 / 约束 |
+|---:|---|---|---|
+| 1 | 日期 (Date) | actl_date | YYYY-MM-DD |
+| 2 | 航空器型别 (Type) | acft_type | 大写 |
+| 3 | 航空器登记号 (Reg No.) | reg_no | 大写 |
+| 4 | 航段 (Route) | dep_icao - arr_icao | 拼接（如 ZBAA-ZSSS）。模拟机留空 |
+| 5 | 飞行总时间 (Total Time) | block_time_min | HH:MM。模拟机留空 |
+| 6 | 机长 (PIC) | pic_min | HH:MM |
+| 7 | 副驾驶 (SIC) | sic_min | HH:MM |
+| 8 | 带飞 (Dual Received) | dual_min | HH:MM |
+| 9 | 教员 (Instructor) | instructor_min | HH:MM |
+| 10 | 夜航 (Night Flight) | night_flight_min | HH:MM |
+| 11 | 仪表 (Instrument) | instrument_min | HH:MM |
+| 12 | 进近类型 (Type of APP) | approach_type | 文本输出 |
+| 13 | 昼间起降 (Day Ldg) | day_ldg | 数字 |
+| 14 | 夜间起降 (Night Ldg) | night_ldg | 数字 |
+| 15 | 模拟机时间 (Sim Time) | block_time_min | HH:MM（仅当 duty_type=SIMULATOR 时填入此列，第5列留空） |
+| 16 | 备注 (Remarks) | flight_no + remarks | 拼接输出 |
+
+## 七、 技术栈定稿输出 (Final Tech Stack)
+
+| 模块名称 | 选用技术 | 说明 |
+|---|---|---|
+| 移动端框架 | React Native (Expo) | 高效跨端，适合 Solo Developer 快速出表单 |
+| 本地离线库 | WatermelonDB (SQLite) | 强大的离线数据库，底层性能优越，Schema 友好 |
+| Excel 导出库 | SheetJS (xlsx) | 配合 expo-file-system 实现纯本地报表生成分享 |
+| 后端 API 代理 | Node.js + NestJS/Express | 仅用作 OpenSky 等外部 API 的代理防限流 |
+| 云端同步(V1.0) | Cut (暂缓) | V1.0 不设后端 DB，专注本地体验，降低首发风险 |
+
+### 🕵️‍♂️ 附录：多方专家开发前最终 Go/No-Go 审阅记录
+
+为了确保这套 PRD 在编码阶段不出现任何逻辑阻塞，我们进行了最终的交叉审阅：
+
+1.  **👨‍✈️ 民航专家 (SME) - 【GO】**：
     
-2.  **时钟防篡改**：App 在每次网络连接成功时，需拉取服务器的 UTC 时间，计算与本地手机系统时间的 `Offset`（差值）。写入数据库的 `last_modified` 必须是 `本地时间 + Offset`，防止用户手机时区错乱导致同步逻辑崩溃。
+    -   _意见_：“模拟机时长与真实飞行时长的 Dashboard 隔离，以及 Excel 导出时的第 5 列与第 15 列互斥判定，完美契合 CCAR-61 部规章，规避了飞行员经历造假的红线。”
+        
+2.  **👨‍💻 首席架构师 (Tech Lead) - 【GO】**：
     
-3.  **性能体验**：在低端设备上进行 10,000 条本地 SQLite 数据的列表滑动时，需保证 60fps 的流畅度（引入分页加载或虚拟列表技术）。
+    -   _意见_：“将 `DECIMAL` 彻底改为 `INTEGER` 分钟数是神来之笔。砍掉 V1.0 的后端同步极大释放了前端开发精力。Schema 里预留了 `sync_status` 和 `last_modified_at`，这叫做‘进可攻退可守’，架构极其稳健。”
+        
+3.  **🎨 交互设计师 (UI/UX) - 【GO】**：
+    
+    -   _意见_：“纯数字免冒号输入、加上 `OFF = TO - 10` 的自动推算，能帮飞行员在机舱里省去至少 50% 的多余点击，单手盲操体验拉满。”
+        
+4.  **🔬 高级测试工程师 (QA) - 【GO】**：
+    
+    -   _意见_：“明确定义了跨零点自适应（+24H）和 `PIC+SIC+Dual+Inst <= Block` 的阻断校验边界。测试用例完全可以根据 PRD 1:1 编写，没有模棱两可的地带。”
