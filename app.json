@@ -1,0 +1,31 @@
+{
+    "expo": {
+        "name": "CAAC Digital Logbook",
+        "slug": "caac-digital-logbook",
+        "version": "1.0.0",
+        "orientation": "portrait",
+        "icon": "./assets/icon.png",
+        "userInterfaceStyle": "automatic",
+        "splash": {
+            "image": "./assets/splash.png",
+            "resizeMode": "contain",
+            "backgroundColor": "#0A0F1E"
+        },
+        "assetBundlePatterns": [
+            "**/*"
+        ],
+        "ios": {
+            "supportsTablet": false,
+            "bundleIdentifier": "com.caac.digitallogbook"
+        },
+        "android": {
+            "adaptiveIcon": {
+                "foregroundImage": "./assets/adaptive-icon.png",
+                "backgroundColor": "#0A0F1E"
+            },
+            "package": "com.caac.digitallogbook"
+        },
+        "jsEngine": "hermes",
+        "plugins": []
+    }
+}
