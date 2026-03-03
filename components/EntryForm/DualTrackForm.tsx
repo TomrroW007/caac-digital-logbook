@@ -23,8 +23,8 @@ import MaskedTimeInput from '../shared/MaskedTimeInput';
 import { OptionPicker } from '../shared/OptionPicker';
 import { resolveFourTimePoints } from '../../utils/FlightMath';
 import { validateFlightRecord, type FlightRecordInput } from '../../utils/ComplianceValidator';
-import { lookupAirportOffset } from '../../data/airportTimezones';
-import { localTimeToUtcISO } from '../../utils/TimeCalculator';
+import { lookupAirportOffset, isDstObservingRegion } from '../../data/airportTimezones';
+import { localTimeToUtcISO, isNightHintTime } from '../../utils/TimeCalculator';
 import { minutesToHHMM } from '../../utils/TimeCalculator';
 import type { LogbookRecord } from '../../model/LogbookRecord';
 
@@ -44,8 +44,10 @@ type FlightFields = {
     sicRaw: string;
     dualRaw: string;
     instructorRaw: string;
-    pilotRole: 'PF' | 'PM' | '';
+    pilotRole: 'PF' | 'PM' | 'PICUS' | '';
     approachType: string;
+    dayTo: number;
+    nightTo: number;
     dayLdg: number;
     nightLdg: number;
     nightFlightRaw: string;
@@ -72,32 +74,32 @@ type SharedFields = {
 // ─── Domain Enum Constants ────────────────────────────────────────────────────
 
 const APPROACH_TYPE_OPTIONS = [
-    { label: 'ILS CAT I',    value: 'ILS CAT I' },
-    { label: 'ILS CAT II',   value: 'ILS CAT II' },
-    { label: 'ILS CAT III',  value: 'ILS CAT III' },
-    { label: 'RNP AR',       value: 'RNP AR' },
-    { label: 'RNAV (GNSS)',  value: 'RNAV (GNSS)' },
-    { label: 'VOR',          value: 'VOR' },
-    { label: 'NDB',          value: 'NDB' },
-    { label: '目视 Visual',   value: 'Visual' },
+    { label: 'ILS CAT I', value: 'ILS CAT I' },
+    { label: 'ILS CAT II', value: 'ILS CAT II' },
+    { label: 'ILS CAT III', value: 'ILS CAT III' },
+    { label: 'RNP AR', value: 'RNP AR' },
+    { label: 'RNAV (GNSS)', value: 'RNAV (GNSS)' },
+    { label: 'VOR', value: 'VOR' },
+    { label: 'NDB', value: 'NDB' },
+    { label: '目视 Visual', value: 'Visual' },
 ];
 
 const SIM_CAT_OPTIONS = [
-    { label: 'FNPT I',       value: 'FNPT I' },
-    { label: 'FNPT II',      value: 'FNPT II' },
-    { label: 'FFS Level B',  value: 'FFS Level B' },
-    { label: 'FFS Level C',  value: 'FFS Level C' },
-    { label: 'FFS Level D',  value: 'FFS Level D' },
+    { label: 'FNPT I', value: 'FNPT I' },
+    { label: 'FNPT II', value: 'FNPT II' },
+    { label: 'FFS Level B', value: 'FFS Level B' },
+    { label: 'FFS Level C', value: 'FFS Level C' },
+    { label: 'FFS Level D', value: 'FFS Level D' },
 ];
 
 const TRAINING_TYPE_OPTIONS = [
-    { label: 'OPC',          value: 'OPC' },
-    { label: 'LPC',          value: 'LPC' },
-    { label: 'PC',           value: 'PC' },
-    { label: 'IR',           value: 'IR' },
-    { label: 'Base Training',value: 'Base Training' },
-    { label: 'Line Training',value: 'Line Training' },
-    { label: 'Type Rating',  value: 'Type Rating' },
+    { label: 'OPC', value: 'OPC' },
+    { label: 'LPC', value: 'LPC' },
+    { label: 'PC', value: 'PC' },
+    { label: 'IR', value: 'IR' },
+    { label: 'Base Training', value: 'Base Training' },
+    { label: 'Line Training', value: 'Line Training' },
+    { label: 'Type Rating', value: 'Type Rating' },
 ];
 
 // ─── Initial States ───────────────────────────────────────────────────────────
@@ -107,6 +109,7 @@ const EMPTY_FLIGHT: FlightFields = {
     offRaw: '', toRaw: '', ldgRaw: '', onRaw: '',
     picRaw: '', sicRaw: '', dualRaw: '', instructorRaw: '',
     pilotRole: '', approachType: '',
+    dayTo: 0, nightTo: 0,
     dayLdg: 0, nightLdg: 0,
     nightFlightRaw: '', instrumentRaw: '',
 };
@@ -132,7 +135,10 @@ export interface FormSavePayload extends FlightRecordInput {
     toUtcISO: string | null;
     ldgUtcISO: string | null;
     approachType: string | null;
-    pilotRole: 'PF' | 'PM' | null;
+    /** PF, PM, or PICUS (机长受监视飞行) */
+    pilotRole: 'PF' | 'PM' | 'PICUS' | null;
+    dayTo: number;
+    nightTo: number;
     dayLdg: number;
     nightLdg: number;
     simNo: string | null;
@@ -182,6 +188,8 @@ export const DualTrackForm: React.FC<Props> = ({
             instructorRaw: existingRecord.instructorMin > 0 ? String(existingRecord.instructorMin) : '',
             pilotRole: existingRecord.pilotRole ?? '',
             approachType: existingRecord.approachType ?? '',
+            dayTo: existingRecord.safeDayTo,
+            nightTo: existingRecord.safeNightTo,
             dayLdg: existingRecord.dayLdg,
             nightLdg: existingRecord.nightLdg,
             nightFlightRaw: existingRecord.nightFlightMin > 0 ? String(existingRecord.nightFlightMin) : '',
@@ -201,6 +209,18 @@ export const DualTrackForm: React.FC<Props> = ({
         : EMPTY_SIM
     );
 
+    // ── DST Override Offsets (one per airport direction) ─────────────────────
+    // Initialised from the timezone dictionary. Pilot can ±60m for DST.
+    const [depOffsetOverride, setDepOffsetOverride] = useState<number>(
+        lookupAirportOffset(existingRecord?.depIcao ?? '')
+    );
+    const [arrOffsetOverride, setArrOffsetOverride] = useState<number>(
+        lookupAirportOffset(existingRecord?.arrIcao ?? '')
+    );
+    // Which airports currently trigger the DST warning banner
+    const depHasDst = flight.depIcao.length === 4 && isDstObservingRegion(flight.depIcao);
+    const arrHasDst = flight.arrIcao.length === 4 && isDstObservingRegion(flight.arrIcao);
+
     // Computed block time for display
     const [blockTimeMin, setBlockTimeMin] = useState<number | null>(
         existingRecord?.blockTimeMin ?? null
@@ -214,9 +234,10 @@ export const DualTrackForm: React.FC<Props> = ({
 
     const handleDutyTypeChange = (next: DutyType) => {
         if (next === dutyType) return;
-        // PRD §3.1: purge mode-specific data on toggle
+        // PRD §3.1: purge mode-specific data on toggle.
+        // QA-mandated: dayTo/nightTo MUST also reset to 0 on DUTY switch.
         if (next === 'SIMULATOR') {
-            setFlight(EMPTY_FLIGHT);
+            setFlight(EMPTY_FLIGHT); // EMPTY_FLIGHT.dayTo = 0, .nightTo = 0
             setBlockTimeMin(null);
         } else {
             setSim(EMPTY_SIM);
@@ -236,24 +257,21 @@ export const DualTrackForm: React.FC<Props> = ({
     const handleTimeAxisBlur = useCallback(() => {
         const aDate = shared.actlDate || today();
 
-        // Build UTC ISO strings from raw digit inputs + airport offsets
-        const depOffset = lookupAirportOffset(flight.depIcao);
-        const arrOffset = lookupAirportOffset(flight.arrIcao);
-
+        // Use DST-override offsets (pilot-confirmed) — not raw dictionary lookup.
+        // This ensures DST adjustments are reflected in UTC conversions.
         const toUtcISO = flight.toRaw.length === 4
-            ? localTimeToUtcISO(aDate, flight.toRaw, depOffset)
+            ? localTimeToUtcISO(aDate, flight.toRaw, depOffsetOverride)
             : null;
         const ldgUtcISO = flight.ldgRaw.length === 4
-            ? localTimeToUtcISO(aDate, flight.ldgRaw, arrOffset)
+            ? localTimeToUtcISO(aDate, flight.ldgRaw, arrOffsetOverride)
             : null;
         const offUtcISO = flight.offRaw.length === 4
-            ? localTimeToUtcISO(aDate, flight.offRaw, depOffset)
+            ? localTimeToUtcISO(aDate, flight.offRaw, depOffsetOverride)
             : null;
         const onUtcISO = flight.onRaw.length === 4
-            ? localTimeToUtcISO(aDate, flight.onRaw, arrOffset)
+            ? localTimeToUtcISO(aDate, flight.onRaw, arrOffsetOverride)
             : null;
 
-        // Need at least OFF+ON (direct) or TO+LDG (for inference)
         const canResolve =
             (offUtcISO && onUtcISO) ||
             (toUtcISO && ldgUtcISO);
@@ -268,7 +286,7 @@ export const DualTrackForm: React.FC<Props> = ({
         } catch {
             // Not enough data yet to resolve — silent
         }
-    }, [flight, shared.actlDate]);
+    }, [flight, shared.actlDate, depOffsetOverride, arrOffsetOverride]);
 
     // ── SIM Time Auto-Fill ────────────────────────────────────────────────────
 
@@ -297,14 +315,12 @@ export const DualTrackForm: React.FC<Props> = ({
         setSubmitted(true);
 
         const aDate = shared.actlDate || today();
-        const depOffset = lookupAirportOffset(flight.depIcao);
-        const arrOffset = lookupAirportOffset(flight.arrIcao);
 
-        // Build UTC strings
+        // Use DST-override offsets (may differ from dictionary defaults after pilot adjustment)
         const offUtcISO = flight.offRaw.length === 4
-            ? localTimeToUtcISO(aDate, flight.offRaw, depOffset) : null;
+            ? localTimeToUtcISO(aDate, flight.offRaw, depOffsetOverride) : null;
         const onUtcISO = flight.onRaw.length === 4
-            ? localTimeToUtcISO(aDate, flight.onRaw, arrOffset) : null;
+            ? localTimeToUtcISO(aDate, flight.onRaw, arrOffsetOverride) : null;
         const fromUtcISO = sim.fromRaw.length === 4
             ? localTimeToUtcISO(aDate, sim.fromRaw, 480) : null;
         const toSimUtcISO = sim.toRaw.length === 4
@@ -333,13 +349,9 @@ export const DualTrackForm: React.FC<Props> = ({
         const result = validateFlightRecord(recordInput);
 
         if (!result.valid) {
-            // Build error map by field name
             const errMap: Record<string, string> = {};
-            result.errors.forEach(e => {
-                errMap[e.field] = e.message;
-            });
+            result.errors.forEach(e => { errMap[e.field] = e.message; });
             setErrors(errMap);
-
             Alert.alert(
                 '保存失败',
                 `共发现 ${result.errors.length} 个问题，请检查标红字段。`,
@@ -351,9 +363,9 @@ export const DualTrackForm: React.FC<Props> = ({
         setErrors({});
 
         const toUtcISO = flight.toRaw.length === 4
-            ? localTimeToUtcISO(aDate, flight.toRaw, depOffset) : null;
+            ? localTimeToUtcISO(aDate, flight.toRaw, depOffsetOverride) : null;
         const ldgUtcISO = flight.ldgRaw.length === 4
-            ? localTimeToUtcISO(aDate, flight.ldgRaw, arrOffset) : null;
+            ? localTimeToUtcISO(aDate, flight.ldgRaw, arrOffsetOverride) : null;
 
         const fullPayload: FormSavePayload = {
             ...recordInput,
@@ -365,7 +377,9 @@ export const DualTrackForm: React.FC<Props> = ({
             toUtcISO: dutyType === 'FLIGHT' ? toUtcISO : null,
             ldgUtcISO: dutyType === 'FLIGHT' ? ldgUtcISO : null,
             approachType: dutyType === 'FLIGHT' ? (flight.approachType || null) : null,
-            pilotRole: dutyType === 'FLIGHT' ? (flight.pilotRole || null) : null,
+            pilotRole: dutyType === 'FLIGHT' ? (flight.pilotRole as 'PF' | 'PM' | 'PICUS' | null || null) : null,
+            dayTo: dutyType === 'FLIGHT' ? flight.dayTo : 0,
+            nightTo: dutyType === 'FLIGHT' ? flight.nightTo : 0,
             dayLdg: dutyType === 'FLIGHT' ? flight.dayLdg : 0,
             nightLdg: dutyType === 'FLIGHT' ? flight.nightLdg : 0,
             simNo: dutyType === 'SIMULATOR' ? (sim.simNo || null) : null,
@@ -391,8 +405,17 @@ export const DualTrackForm: React.FC<Props> = ({
     const fieldError = (key: string) =>
         submitted && errors[key] ? errors[key] : undefined;
 
-    // ── Remarks section (shared across both duty tracks) ─────────────────────
+    // ── PICUS quick-append (idempotent per QA mandate) ────────────────────────
+    const handleAddPicus = () => {
+        // QA: if 'PICUS' already present in remarks, do not append again
+        if (shared.remarks.includes('PICUS')) return;
+        updateShared({ remarks: shared.remarks ? shared.remarks + ' PICUS' : 'PICUS' });
+    };
 
+    // ── Night-hint: show 🌙 when LDG or ON is after 19:00 ────────────────────
+    const showNightHint = isNightHintTime(flight.ldgRaw) || isNightHintTime(flight.onRaw);
+
+    // ── Remarks section (shared across both duty tracks) ─────────────────────
     const renderRemarksSection = () => (
         <View style={styles.section}>
             <Text style={styles.sectionTitle}>备注 Remarks</Text>
@@ -406,6 +429,16 @@ export const DualTrackForm: React.FC<Props> = ({
                 numberOfLines={3}
                 testID="input-remarks"
             />
+            {/* PRD §3.2: one-tap PICUS append — idempotent */}
+            {dutyType === 'FLIGHT' && (
+                <TouchableOpacity
+                    style={styles.picusBtn}
+                    onPress={handleAddPicus}
+                    testID="btn-add-picus"
+                >
+                    <Text style={styles.picusBtnText}>＋ PICUS</Text>
+                </TouchableOpacity>
+            )}
         </View>
     );
 
@@ -501,7 +534,12 @@ export const DualTrackForm: React.FC<Props> = ({
                                 <TextInput
                                     style={styles.textInput}
                                     value={flight.depIcao}
-                                    onChangeText={v => updateFlight({ depIcao: v.toUpperCase() })}
+                                    onChangeText={v => {
+                                        const icao = v.toUpperCase();
+                                        updateFlight({ depIcao: icao });
+                                        // Auto-sync the offset state; pilot can override below
+                                        if (icao.length === 4) setDepOffsetOverride(lookupAirportOffset(icao));
+                                    }}
                                     placeholder="ZBAA"
                                     placeholderTextColor={COLORS.placeholder}
                                     maxLength={4}
@@ -515,7 +553,11 @@ export const DualTrackForm: React.FC<Props> = ({
                                 <TextInput
                                     style={styles.textInput}
                                     value={flight.arrIcao}
-                                    onChangeText={v => updateFlight({ arrIcao: v.toUpperCase() })}
+                                    onChangeText={v => {
+                                        const icao = v.toUpperCase();
+                                        updateFlight({ arrIcao: icao });
+                                        if (icao.length === 4) setArrOffsetOverride(lookupAirportOffset(icao));
+                                    }}
                                     placeholder="ZSSS"
                                     placeholderTextColor={COLORS.placeholder}
                                     maxLength={4}
@@ -537,6 +579,64 @@ export const DualTrackForm: React.FC<Props> = ({
                                 />
                             </View>
                         </View>
+
+                        {/* DST Override — shown when DEP or ARR is in a DST-observing region */}
+                        {(depHasDst || arrHasDst) && (
+                            <View style={styles.dstBanner}>
+                                <Text style={styles.dstBannerTitle}>
+                                    ⚠️ 夏令时 (DST) 提醒
+                                </Text>
+                                <Text style={styles.dstBannerText}>
+                                    检测到目的地/出发地可能实行夏令时，请确认并手动调整 UTC 偏移量。
+                                </Text>
+                                {depHasDst && (
+                                    <View style={styles.dstOffsetRow}>
+                                        <Text style={styles.dstOffsetLabel}>
+                                            DEP {flight.depIcao} 偏移:
+                                            {depOffsetOverride >= 0 ? ' UTC+' : ' UTC'}
+                                            {(depOffsetOverride / 60).toFixed(1)}h
+                                        </Text>
+                                        <TouchableOpacity
+                                            style={styles.dstStepBtn}
+                                            onPress={() => setDepOffsetOverride(v => v - 60)}
+                                            testID="dep-dst-minus"
+                                        >
+                                            <Text style={styles.dstStepText}>−1h</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.dstStepBtn}
+                                            onPress={() => setDepOffsetOverride(v => v + 60)}
+                                            testID="dep-dst-plus"
+                                        >
+                                            <Text style={styles.dstStepText}>+1h</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                                {arrHasDst && (
+                                    <View style={styles.dstOffsetRow}>
+                                        <Text style={styles.dstOffsetLabel}>
+                                            ARR {flight.arrIcao} 偏移:
+                                            {arrOffsetOverride >= 0 ? ' UTC+' : ' UTC'}
+                                            {(arrOffsetOverride / 60).toFixed(1)}h
+                                        </Text>
+                                        <TouchableOpacity
+                                            style={styles.dstStepBtn}
+                                            onPress={() => setArrOffsetOverride(v => v - 60)}
+                                            testID="arr-dst-minus"
+                                        >
+                                            <Text style={styles.dstStepText}>−1h</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.dstStepBtn}
+                                            onPress={() => setArrOffsetOverride(v => v + 60)}
+                                            testID="arr-dst-plus"
+                                        >
+                                            <Text style={styles.dstStepText}>+1h</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            </View>
+                        )}
                     </View>
 
                     {/* Four-Point Time Axis */}
@@ -667,10 +767,11 @@ export const DualTrackForm: React.FC<Props> = ({
                         <OptionPicker
                             label="飞行角色 Pilot Role"
                             value={flight.pilotRole}
-                            onChange={v => updateFlight({ pilotRole: v as 'PF' | 'PM' | '' })}
+                            onChange={v => updateFlight({ pilotRole: v as 'PF' | 'PM' | 'PICUS' | '' })}
                             options={[
                                 { label: 'PF (操作)', value: 'PF' },
                                 { label: 'PM (监控)', value: 'PM' },
+                                { label: 'PICUS (机长受监视)', value: 'PICUS' },
                             ]}
                             testID="picker-pilot-role"
                         />
@@ -683,19 +784,35 @@ export const DualTrackForm: React.FC<Props> = ({
                         />
                     </View>
 
-                    {/* Landings */}
+                    {/* Takeoffs & Landings — 2×2 grid per SME recommendation */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>起降次数 Landings</Text>
+                        <Text style={styles.sectionTitle}>起降次数 T/O & Landings</Text>
+                        <Text style={styles.sectionHint}>起飞 / 落地各按昼夜分别记录（局方标准格式）</Text>
                         <View style={styles.row}>
                             <LandingCounter
-                                label="昼间 Day Ldg"
+                                label="昼间起飞 Day T/O"
+                                value={flight.dayTo}
+                                onChange={v => updateFlight({ dayTo: v })}
+                                testIDBase="day-to"
+                            />
+                            <View style={styles.gap} />
+                            <LandingCounter
+                                label="夜间起飞 Night T/O"
+                                value={flight.nightTo}
+                                onChange={v => updateFlight({ nightTo: v })}
+                                testIDBase="night-to"
+                            />
+                        </View>
+                        <View style={[styles.row, { marginTop: 8 }]}>
+                            <LandingCounter
+                                label="昼间落地 Day LDG"
                                 value={flight.dayLdg}
                                 onChange={v => updateFlight({ dayLdg: v })}
                                 testIDBase="day-ldg"
                             />
                             <View style={styles.gap} />
                             <LandingCounter
-                                label="夜间 Night Ldg"
+                                label="夜间落地 Night LDG"
                                 value={flight.nightLdg}
                                 onChange={v => updateFlight({ nightLdg: v })}
                                 testIDBase="night-ldg"
@@ -709,9 +826,15 @@ export const DualTrackForm: React.FC<Props> = ({
                         <Text style={styles.sectionHint}>夜航和仪表时间与 Block Time 可重叠，不入局方合规公式计算</Text>
                         <View style={styles.row}>
                             <View style={styles.roleTimeField}>
-                                <Text style={styles.inputLabel}>夜航 Night (分)</Text>
+                                {/* PRD §3.2: 🌙 label icon + amber border when LDG/ON ≥ 19:00 LT */}
+                                <Text style={styles.inputLabel}>
+                                    {showNightHint ? '🌙 夜航 Night (分) (建议填写)' : '夜航 Night (分)'}
+                                </Text>
                                 <TextInput
-                                    style={styles.textInput}
+                                    style={[
+                                        styles.textInput,
+                                        showNightHint && styles.nightHintInput,
+                                    ]}
                                     value={flight.nightFlightRaw}
                                     onChangeText={v => updateFlight({ nightFlightRaw: v.replace(/\D/g, '') })}
                                     keyboardType="number-pad"
@@ -889,6 +1012,7 @@ const COLORS = {
     primary: '#3B82F6',
     success: '#22C55E',
     error: '#EF4444',
+    warning: '#F59E0B',
     border: '#374151',
     background: '#111827',
     surface: '#1F2937',
@@ -1050,6 +1174,71 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: '600',
     },
+
+    // Night hint input style (amber border + subtle glow)
+    nightHintInput: {
+        borderColor: '#F59E0B',
+        shadowColor: '#F59E0B',
+        shadowOpacity: 0.35,
+        shadowRadius: 6,
+        elevation: 3,
+    },
+
+    // PICUS quick-append button
+    picusBtn: {
+        alignSelf: 'flex-start',
+        marginTop: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#60A5FA',
+        backgroundColor: '#1E3A5F',
+    },
+    picusBtnText: { color: '#93C5FD', fontSize: 12, fontWeight: '700' },
+
+    // DST Banner
+    dstBanner: {
+        marginTop: 12,
+        padding: 12,
+        borderRadius: 8,
+        backgroundColor: '#422006',
+        borderWidth: 1,
+        borderColor: '#F59E0B',
+    },
+    dstBannerTitle: {
+        color: '#FCD34D',
+        fontWeight: '700',
+        fontSize: 12,
+        marginBottom: 4,
+    },
+    dstBannerText: {
+        color: '#FDE68A',
+        fontSize: 11,
+        lineHeight: 16,
+        marginBottom: 8,
+    },
+    dstOffsetRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+        gap: 8,
+    },
+    dstOffsetLabel: {
+        flex: 1,
+        color: '#FCD34D',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    dstStepBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 6,
+        backgroundColor: '#78350F',
+        borderWidth: 1,
+        borderColor: '#F59E0B',
+    },
+    dstStepText: { color: '#FCD34D', fontSize: 13, fontWeight: '700' },
 
     // Action buttons
     actions: {

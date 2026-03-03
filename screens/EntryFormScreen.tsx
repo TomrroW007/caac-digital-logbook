@@ -55,6 +55,10 @@ function applyPayloadToRecord(record: LogbookRecord, data: FormSavePayload) {
     record.dayLdg = data.dayLdg;
     record.nightLdg = data.nightLdg;
 
+    // Takeoffs (Phase 1 schema v3 fields — coalesce to 0 for null-safe writes)
+    record.dayTo = data.dayTo ?? 0;
+    record.nightTo = data.nightTo ?? 0;
+
     // Simulator Specific
     record.simNo = data.simNo ?? null;
     record.simCat = data.simCat ?? null;

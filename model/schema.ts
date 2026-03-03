@@ -2,13 +2,19 @@
  * @file model/schema.ts
  * @description WatermelonDB app schema for CAAC Digital Logbook.
  *
- * Architecture rules (from PRD §二):
+ * Architecture rules (from PRD V1.1 §二):
  *  - Single dual-track table "logbook_records" covers both FLIGHT and SIMULATOR duties.
  *  - All time *durations* (block time, PIC, SIC, …) stored as INTEGER minutes — zero float risk.
  *  - Time *points* (OFF/TO/LDG/ON) stored as UTC ISO-8601 strings.
  *  - Date fields stored as YYYY-MM-DD strings.
  *  - actl_date is indexed for fast 90-day rolling queries.
  *  - Sync-readiness columns (is_deleted, sync_status, last_modified_at) always present.
+ *
+ * Version history:
+ *  - version 1: Initial schema.
+ *  - version 2: Added `uuid` (cloud-sync pre-reservation).
+ *  - version 3: Added `day_to` / `night_to` (PRD V1.1 — CCAR-61 independent T/O counts).
+ *               Extended PilotRole to include 'PICUS'.
  */
 
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
@@ -21,8 +27,12 @@ export type DutyType = 'FLIGHT' | 'SIMULATOR';
 /** Sync status values. V1.0 only ever writes LOCAL_ONLY. */
 export type AppSyncStatus = 'LOCAL_ONLY' | 'PENDING_UPLOAD' | 'SYNCED';
 
-/** Pilot role during the flight. */
-export type PilotRole = 'PF' | 'PM';
+/**
+ * Pilot role during the flight.
+ * PICUS = Pilot-In-Command Under Supervision (机长受监视飞行) — must be noted in remarks
+ * for ATPL applications per CCAR-61.
+ */
+export type PilotRole = 'PF' | 'PM' | 'PICUS';
 
 // Table name constant — single source of truth to avoid typos.
 export const TABLE_LOGBOOK_RECORDS = 'logbook_records' as const;
@@ -32,12 +42,12 @@ export const TABLE_LOGBOOK_RECORDS = 'logbook_records' as const;
 /**
  * The application schema.
  *
- * Version history:
- *  - version 1: Initial schema (Phase 1 — all core fields established).
- *  - version 2: Added `uuid` column for cloud-sync pre-reservation (PRD §二 §五).
+ * IMPORTANT: Bump this version whenever you add/remove/alter columns.
+ * A version bump without a corresponding migration will cause WatermelonDB to
+ * reset the database — catastrophic for a pilot logbook.
  */
 export const schema = appSchema({
-    version: 2,
+    version: 3,
     tables: [
         tableSchema({
             name: TABLE_LOGBOOK_RECORDS,
@@ -166,17 +176,36 @@ export const schema = appSchema({
                  */
                 { name: 'approach_type', type: 'string', isOptional: true },
 
-                // ── Landing Counts ────────────────────────────────────────────────────
+                // ── Takeoff & Landing Counts (PRD V1.1 §六) ──────────────────────────────
+                //
+                // CCAR-61 requires independent audit of takeoff counts and landing counts.
+                // 90-day monitoring uses COMBINED totals: totalTo = dayTo+nightTo,
+                // totalLdg = dayLdg+nightLdg (not per-category) — see ComplianceValidator.ts.
+                //
+                // day_to / night_to are isOptional:true to allow safe schema migration
+                // on existing databases (SQLite cannot add NOT NULL without a default).
 
                 /**
-                 * day_ldg: number of daytime landings. INTEGER. Default 0.
-                 * 90-day monitoring: triggers yellow ≤3, red =0.
+                 * day_to: number of daytime TAKEOFFS. INTEGER. Default 0.
+                 * isOptional: true — safe migration; UI/business layer coalesces null → 0.
+                 */
+                { name: 'day_to', type: 'number', isOptional: true },
+
+                /**
+                 * night_to: number of nighttime TAKEOFFS. INTEGER. Default 0.
+                 * isOptional: true — safe migration; UI/business layer coalesces null → 0.
+                 */
+                { name: 'night_to', type: 'number', isOptional: true },
+
+                /**
+                 * day_ldg: number of daytime LANDINGS. INTEGER. Default 0.
+                 * 90-day monitoring: combined with night_ldg for threshold check.
                  */
                 { name: 'day_ldg', type: 'number' },
 
                 /**
-                 * night_ldg: number of nighttime landings. INTEGER. Default 0.
-                 * 90-day monitoring: triggers yellow ≤3, red =0.
+                 * night_ldg: number of nighttime LANDINGS. INTEGER. Default 0.
+                 * 90-day monitoring: combined with day_ldg for threshold check.
                  */
                 { name: 'night_ldg', type: 'number' },
 

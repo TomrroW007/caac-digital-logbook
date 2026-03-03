@@ -13,6 +13,9 @@
  *
  * Version history:
  *   v1  → v2 : Added `uuid` column (cloud-sync pre-reservation, PRD §二 §五).
+ *   v2  → v3 : Added `day_to` / `night_to` columns (PRD V1.1 — CCAR-61 T/O counts).
+ *              Both columns are isOptional:true — SQLite cannot add NOT NULL columns
+ *              to existing rows without a DEFAULT; business layer coalesces null → 0.
  */
 
 import { schemaMigrations, addColumns } from '@nozbe/watermelondb/Schema/migrations';
@@ -34,6 +37,31 @@ export const migrations = schemaMigrations({
                          * isOptional: true so existing records (null) remain valid.
                          */
                         { name: 'uuid', type: 'string', isOptional: true },
+                    ],
+                }),
+            ],
+        },
+
+        // ── v2 → v3 ──────────────────────────────────────────────────────────
+        {
+            toVersion: 3,
+            steps: [
+                addColumns({
+                    table: TABLE_LOGBOOK_RECORDS,
+                    columns: [
+                        /**
+                         * day_to: daytime takeoff count (PRD V1.1 §六).
+                         * CCAR-61 requires independent T/O counts for near-recency audit.
+                         * isOptional: true — existing rows will receive NULL; business layer
+                         * coalesces to 0 via LogbookRecord.safeDayTo getter.
+                         */
+                        { name: 'day_to', type: 'number', isOptional: true },
+
+                        /**
+                         * night_to: nighttime takeoff count (PRD V1.1 §六).
+                         * Same migration-safety requirement as day_to.
+                         */
+                        { name: 'night_to', type: 'number', isOptional: true },
                     ],
                 }),
             ],

@@ -23,7 +23,7 @@ import type { LogbookRecord } from '../model/LogbookRecord';
 import {
     validate90DayExperience,
     get90DayBoundaryDate,
-    type LandingRecord
+    type ExperienceRecord,
 } from '../utils/ComplianceValidator';
 import { minutesToHHMM } from '../utils/TimeCalculator';
 
@@ -61,18 +61,20 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
     // ── 90-Day Experience Calculation ──
     const experienceReport = useMemo(() => {
         const boundary = get90DayBoundaryDate();
-        // Filter FLIGHT records within the last 90 days
+        // Filter FLIGHT records within the last 90 days (Beijing-time baseline)
         const recentFlights = logbooks.filter(r =>
             r.isFlight && r.actlDate >= boundary
         );
 
-        // Map to exact required shape for pure function
-        const landingRecords: LandingRecord[] = recentFlights.map(r => ({
+        // Map to ExperienceRecord — includes dayTo/nightTo (Phase 1 schema v3)
+        const experienceRecords: ExperienceRecord[] = recentFlights.map(r => ({
+            dayTo: r.safeDayTo,
+            nightTo: r.safeNightTo,
             dayLdg: r.dayLdg,
             nightLdg: r.nightLdg,
         }));
 
-        return validate90DayExperience(landingRecords);
+        return validate90DayExperience(experienceRecords);
     }, [logbooks]);
 
     // ── Total Time Calculations ──
@@ -107,24 +109,43 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                     <Text style={styles.subtitle}>飞行员电子飞行记录本</Text>
                 </View>
 
-                {/* 90-Day Experience Card */}
+                {/* 90-Day Experience Card — PRD §4.2 dual-row layout */}
                 <View style={[styles.alertCard, { borderColor: alertTheme.color, backgroundColor: alertTheme.bg }]}>
                     <Text style={[styles.cardTitle, { color: alertTheme.color }]}>
-                        {experienceReport.alertLevel === 'ok' ? '✅' : '⚠'} 近90天近期经历
+                        {experienceReport.alertLevel === 'ok' ? '✅' : experienceReport.alertLevel === 'yellow' ? '⚠️' : '🚫'} 近90天近期经历
                     </Text>
                     <Text style={styles.cardSubtitle}>
                         {experienceReport.alertMessage}
                     </Text>
-                    <View style={styles.ldgRow}>
-                        <View style={styles.ldgCell}>
-                            <Text style={styles.ldgValue}>{experienceReport.dayLdg}</Text>
-                            <Text style={styles.ldgLabel}>昼间落地</Text>
+
+                    {/* Row 1: Takeoff totals (core) + day/night sub-labels */}
+                    <View style={styles.expRow}>
+                        <Text style={styles.expIcon}>🛫</Text>
+                        <View style={styles.expMain}>
+                            <Text style={[styles.expTotal, { color: alertTheme.color }]}>
+                                {experienceReport.totalTo}
+                            </Text>
+                            <Text style={styles.expUnit}>起飞总数</Text>
                         </View>
-                        <View style={styles.ldgDivider} />
-                        <View style={styles.ldgCell}>
-                            <Text style={styles.ldgValue}>{experienceReport.nightLdg}</Text>
-                            <Text style={styles.ldgLabel}>夜间落地</Text>
+                        <Text style={styles.expSub}>
+                            昼: {experienceReport.dayTo}  夜: {experienceReport.nightTo}
+                        </Text>
+                    </View>
+
+                    <View style={styles.expDivider} />
+
+                    {/* Row 2: Landing totals (core) + day/night sub-labels */}
+                    <View style={styles.expRow}>
+                        <Text style={styles.expIcon}>🛬</Text>
+                        <View style={styles.expMain}>
+                            <Text style={[styles.expTotal, { color: alertTheme.color }]}>
+                                {experienceReport.totalLdg}
+                            </Text>
+                            <Text style={styles.expUnit}>落地总数</Text>
                         </View>
+                        <Text style={styles.expSub}>
+                            昼: {experienceReport.dayLdg}  夜: {experienceReport.nightLdg}
+                        </Text>
                     </View>
                 </View>
 
@@ -186,7 +207,10 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
 const enhance = withObservables([], () => ({
     logbooks: database
         .get<LogbookRecord>('logbook_records')
-        .query(Q.where('is_deleted', false))
+        .query(
+            Q.where('is_deleted', false),
+            Q.sortBy('actl_date', Q.desc),
+        )
         .observe(),
 }));
 
@@ -210,11 +234,24 @@ const styles = StyleSheet.create({
     },
     cardTitle: { fontWeight: '700', fontSize: 14 },
     cardSubtitle: { color: COLORS.textSecondary, fontSize: 12, marginTop: 4, marginBottom: 12 },
-    ldgRow: { flexDirection: 'row', alignItems: 'center' },
-    ldgCell: { flex: 1, alignItems: 'center' },
-    ldgValue: { color: COLORS.text, fontSize: 32, fontWeight: '800' },
-    ldgLabel: { color: COLORS.textSecondary, fontSize: 11, marginTop: 4 },
-    ldgDivider: { width: 1, height: 48, backgroundColor: COLORS.border },
+
+    // 90-day dual-row layout
+    expRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+    },
+    expIcon: { fontSize: 22, marginRight: 12 },
+    expMain: { alignItems: 'center', marginRight: 16, minWidth: 56 },
+    expTotal: { fontSize: 36, fontWeight: '800', lineHeight: 40 },
+    expUnit: { color: COLORS.textSecondary, fontSize: 10, marginTop: 2 },
+    expSub: {
+        flex: 1,
+        color: COLORS.textSecondary,
+        fontSize: 12,
+        lineHeight: 20,
+    },
+    expDivider: { height: 1, backgroundColor: COLORS.border, marginHorizontal: 4 },
 
     cardRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
     totalCard: {

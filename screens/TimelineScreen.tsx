@@ -11,6 +11,7 @@ import {
     Text,
     FlatList,
     TouchableOpacity,
+    Alert,
     StyleSheet,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -51,10 +52,36 @@ interface TimelineProps {
 const TimelineScreenBase: React.FC<TimelineProps> = ({ logbooks }) => {
     const navigation = useNavigation<Nav>();
 
+    // ── Soft-delete: long-press → Alert → WatermelonDB write ──
+    const handleDelete = (record: LogbookRecord) => {
+        Alert.alert(
+            '删除记录',
+            `确认删除 ${record.actlDate} 的这条记录？此操作不可撤销。`,
+            [
+                { text: '取消', style: 'cancel' },
+                {
+                    text: '删除',
+                    style: 'destructive',
+                    onPress: () => {
+                        database.write(async () => {
+                            await record.update(r => {
+                                r.isDeleted = true;
+                                // PRD §6: last_modified_at must be UTC — toISOString() is always UTC
+                                r.lastModifiedAt = new Date().toISOString();
+                            });
+                        });
+                    },
+                },
+            ]
+        );
+    };
+
     const renderItem = ({ item }: { item: LogbookRecord }) => (
         <TouchableOpacity
             style={styles.card}
             onPress={() => navigation.navigate('EntryForm', { recordId: item.id })}
+            onLongPress={() => handleDelete(item)}
+            delayLongPress={500}
             testID={`record-row-${item.id}`}
         >
             <View style={styles.cardLeft}>
@@ -89,6 +116,13 @@ const TimelineScreenBase: React.FC<TimelineProps> = ({ logbooks }) => {
                 keyExtractor={item => item.id}
                 renderItem={renderItem}
                 contentContainerStyle={styles.list}
+                ListHeaderComponent={
+                    logbooks.length > 0 ? (
+                        <Text style={styles.hint}>
+                            💡 长按单条记录可删除
+                        </Text>
+                    ) : null
+                }
                 ListEmptyComponent={
                     <View style={styles.empty}>
                         <Text style={styles.emptyIcon}>📋</Text>
@@ -160,4 +194,13 @@ const styles = StyleSheet.create({
     emptyIcon: { fontSize: 48, marginBottom: 16 },
     emptyTitle: { color: COLORS.text, fontSize: 18, fontWeight: '700', marginBottom: 8 },
     emptySubtitle: { color: COLORS.textSecondary, fontSize: 14, textAlign: 'center' },
+
+    // UI/UX: long-press discoverability hint (PRD Phase 4)
+    hint: {
+        color: COLORS.textSecondary,
+        fontSize: 11,
+        textAlign: 'center',
+        paddingVertical: 8,
+        opacity: 0.6,
+    },
 });

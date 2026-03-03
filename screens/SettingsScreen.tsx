@@ -34,14 +34,103 @@ import { database } from '../database';
 import type { LogbookRecord } from '../model/LogbookRecord';
 import { minutesToHHMM } from '../utils/TimeCalculator';
 
-// ─── PDF HTML Generation ──────────────────────────────────────────────────────
+// ─── PDF HTML Generation ───────────────────────────────────────────────────────
+// Strategy: "Chunked Tables" (one independent DOM per page) to guarantee
+// correct thead rendering on iOS/Android WebKit (expo-print).
+// PRD §5.1: per-page 本页合计/以往累计/总计 + signature bar on EVERY page.
+
+const ROWS_PER_PAGE = 18;
+
+/** Running numeric totals tracked across pages. */
+type PageTotals = {
+    blockFlight: number; blockSim: number;
+    pic: number; sic: number; dual: number; instr: number;
+    night: number; instrument: number;
+    dayTo: number; nightTo: number;
+    dayLdg: number; nightLdg: number;
+};
+
+const zeroTotals = (): PageTotals => ({
+    blockFlight: 0, blockSim: 0,
+    pic: 0, sic: 0, dual: 0, instr: 0,
+    night: 0, instrument: 0,
+    dayTo: 0, nightTo: 0, dayLdg: 0, nightLdg: 0,
+});
+
+const addRecord = (acc: PageTotals, r: LogbookRecord): PageTotals => ({
+    blockFlight: acc.blockFlight + (r.isFlight ? r.blockTimeMin : 0),
+    blockSim: acc.blockSim + (r.isFlight ? 0 : r.blockTimeMin),
+    pic: acc.pic + r.picMin,
+    sic: acc.sic + r.sicMin,
+    dual: acc.dual + r.dualMin,
+    instr: acc.instr + r.instructorMin,
+    night: acc.night + r.nightFlightMin,
+    instrument: acc.instrument + r.instrumentMin,
+    dayTo: acc.dayTo + (r.isFlight ? r.safeDayTo : 0),
+    nightTo: acc.nightTo + (r.isFlight ? r.safeNightTo : 0),
+    dayLdg: acc.dayLdg + (r.isFlight ? r.dayLdg : 0),
+    nightLdg: acc.nightLdg + (r.isFlight ? r.nightLdg : 0),
+});
+
+/** Render a single subtotal row <tr>. Label appears in first merged col. */
+const subtotalRow = (label: string, t: PageTotals) => `
+    <tr class="subtotal-row">
+      <td colspan="4" style="text-align:right;font-weight:bold;">${label}</td>
+      <td></td>
+      <td colspan="4"></td>
+      <td>${t.blockFlight > 0 ? minutesToHHMM(t.blockFlight) : ''}</td>
+      <td>${minutesToHHMM(t.pic)}</td>
+      <td>${minutesToHHMM(t.sic)}</td>
+      <td>${minutesToHHMM(t.dual)}</td>
+      <td>${minutesToHHMM(t.instr)}</td>
+      <td>${t.night > 0 ? minutesToHHMM(t.night) : ''}</td>
+      <td>${t.instrument > 0 ? minutesToHHMM(t.instrument) : ''}</td>
+      <td>${t.dayTo}/${t.dayLdg}</td>
+      <td>${t.nightTo}/${t.nightLdg}</td>
+      <td></td><td></td>
+      <td>${t.blockSim > 0 ? minutesToHHMM(t.blockSim) : ''}</td>
+      <td></td>
+    </tr>`;
+
+/** Signature bar rendered at the bottom of EVERY page per CAAC audit rules. */
+const signatureBar = () => `
+  <div class="sig">
+    <div class="sig-box">飞行员签字 Pilot Signature ______</div>
+    <div class="sig-box">教员签字 Instructor Signature ______</div>
+    <div class="sig-box">审核人签字 Check Signature ______</div>
+  </div>`;
 
 function generateLogbookHtml(records: LogbookRecord[]): string {
-    // PRD §5.3: For SIMULATOR records, flight-only columns (Route, Total Time,
-    // Day/Night Ldg, Approach) are blank; block_time_min goes into the Sim Time column.
-    const rowsHtml = records.map(r => {
-        const isFlight = r.dutyType === 'FLIGHT';
-        return `
+    // Chunk records into pages of ROWS_PER_PAGE
+    const pages: LogbookRecord[][] = [];
+    for (let i = 0; i < records.length; i += ROWS_PER_PAGE) {
+        pages.push(records.slice(i, i + ROWS_PER_PAGE));
+    }
+    if (pages.length === 0) pages.push([]); // guard: at least one page
+
+    // Shared table header (reused by every page's <thead>)
+    const thead = `
+    <thead>
+      <tr>
+        <th>计划日期</th><th>实际日期</th><th>机型</th><th>注册号</th>
+        <th>航段 Route</th>
+        <th>OFF UTC</th><th>TO UTC</th><th>LDG UTC</th><th>ON UTC</th>
+        <th>飞行时间 Total</th><th>PIC</th><th>SIC</th><th>带飞</th><th>教员</th>
+        <th>夜航</th><th>仪表</th>
+        <th>昼间起降</th><th>夜间起降</th>
+        <th>角色</th><th>进近类型</th>
+        <th>模拟机时间 Sim</th><th>备注</th>
+      </tr>
+    </thead>`;
+
+    let cumulative = zeroTotals();
+    const pagesHtml = pages.map((pageRecords, pageIndex) => {
+        const isLastPage = pageIndex === pages.length - 1;
+
+        // Build data rows for this page
+        const rowsHtml = pageRecords.map(r => {
+            const isFlight = r.dutyType === 'FLIGHT';
+            return `
     <tr>
       <td>${r.schdDate}</td>
       <td>${r.actlDate}</td>
@@ -49,59 +138,51 @@ function generateLogbookHtml(records: LogbookRecord[]): string {
       <td>${r.regNo ?? ''}</td>
       <td>${isFlight ? (r.routeString || '—') : ''}</td>
       <td>${r.offTimeUtc ? r.offTimeUtc.slice(11, 16) : ''}</td>
-      <td>${r.toTimeUtc  ? r.toTimeUtc.slice(11, 16)  : ''}</td>
+      <td>${r.toTimeUtc ? r.toTimeUtc.slice(11, 16) : ''}</td>
       <td>${r.ldgTimeUtc ? r.ldgTimeUtc.slice(11, 16) : ''}</td>
-      <td>${r.onTimeUtc  ? r.onTimeUtc.slice(11, 16)  : ''}</td>
+      <td>${r.onTimeUtc ? r.onTimeUtc.slice(11, 16) : ''}</td>
       <td>${isFlight ? minutesToHHMM(r.blockTimeMin) : ''}</td>
       <td>${minutesToHHMM(r.picMin)}</td>
       <td>${minutesToHHMM(r.sicMin)}</td>
       <td>${minutesToHHMM(r.dualMin)}</td>
       <td>${minutesToHHMM(r.instructorMin)}</td>
       <td>${r.nightFlightMin > 0 ? minutesToHHMM(r.nightFlightMin) : ''}</td>
-      <td>${r.instrumentMin > 0  ? minutesToHHMM(r.instrumentMin)  : ''}</td>
-      <td>${isFlight && r.dayLdg > 0   ? r.dayLdg   : ''}</td>
-      <td>${isFlight && r.nightLdg > 0 ? r.nightLdg : ''}</td>
+      <td>${r.instrumentMin > 0 ? minutesToHHMM(r.instrumentMin) : ''}</td>
+      <td>${isFlight ? `${r.safeDayTo}/${r.dayLdg}` : ''}</td>
+      <td>${isFlight ? `${r.safeNightTo}/${r.nightLdg}` : ''}</td>
       <td>${isFlight ? (r.pilotRole ?? '') : ''}</td>
       <td>${isFlight ? (r.approachType ?? '') : ''}</td>
       <td>${!isFlight ? minutesToHHMM(r.blockTimeMin) : ''}</td>
       <td>${r.exportRemarks}</td>
     </tr>`;
-    }).join('');
+        }).join('');
 
-    // PRD §5.1: Grand-total row (合计)
-    const totalBlockFlight = records
-        .filter(r => r.dutyType === 'FLIGHT')
-        .reduce((s, r) => s + r.blockTimeMin, 0);
-    const totalBlockSim = records
-        .filter(r => r.dutyType === 'SIMULATOR')
-        .reduce((s, r) => s + r.blockTimeMin, 0);
-    const totalPic  = records.reduce((s, r) => s + r.picMin, 0);
-    const totalSic  = records.reduce((s, r) => s + r.sicMin, 0);
-    const totalDual = records.reduce((s, r) => s + r.dualMin, 0);
-    const totalInst = records.reduce((s, r) => s + r.instructorMin, 0);
-    const totalNight = records.reduce((s, r) => s + r.nightFlightMin, 0);
-    const totalInstrument = records.reduce((s, r) => s + r.instrumentMin, 0);
-    const totalDayLdg   = records.filter(r => r.dutyType === 'FLIGHT').reduce((s, r) => s + r.dayLdg, 0);
-    const totalNightLdg = records.filter(r => r.dutyType === 'FLIGHT').reduce((s, r) => s + r.nightLdg, 0);
+        // Compute page-block totals and grand-running totals
+        const pageTotals = pageRecords.reduce(addRecord, zeroTotals());
+        const prevCumulative = cumulative;  // snapshot before this page
+        cumulative = pageRecords.reduce(addRecord, prevCumulative);
 
-    const totalRow = `
-    <tr class="total-row">
-      <td colspan="4" style="text-align:right;font-weight:bold;">合计 Total</td>
-      <td></td>
-      <td colspan="4"></td>
-      <td>${totalBlockFlight > 0 ? minutesToHHMM(totalBlockFlight) : ''}</td>
-      <td>${minutesToHHMM(totalPic)}</td>
-      <td>${minutesToHHMM(totalSic)}</td>
-      <td>${minutesToHHMM(totalDual)}</td>
-      <td>${minutesToHHMM(totalInst)}</td>
-      <td>${totalNight > 0 ? minutesToHHMM(totalNight) : ''}</td>
-      <td>${totalInstrument > 0 ? minutesToHHMM(totalInstrument) : ''}</td>
-      <td>${totalDayLdg > 0 ? totalDayLdg : ''}</td>
-      <td>${totalNightLdg > 0 ? totalNightLdg : ''}</td>
-      <td></td><td></td>
-      <td>${totalBlockSim > 0 ? minutesToHHMM(totalBlockSim) : ''}</td>
-      <td></td>
-    </tr>`;
+        // Three subtotal rows (QA: use minutesToHHMM on all time fields)
+        const subtotals = [
+            subtotalRow('本页合计', pageTotals),
+            subtotalRow('以往累计', prevCumulative),
+            subtotalRow('总计', cumulative),
+        ].join('');
+
+        // QA: page-break only between pages, NOT after the last page
+        const pageBreak = isLastPage
+            ? ''
+            : ' style="page-break-after: always"';
+
+        return `
+  <div class="page-container"${pageBreak}>
+    <table>
+      ${thead}
+      <tbody>${rowsHtml}${subtotals}</tbody>
+    </table>
+    ${signatureBar()}
+  </div>`;
+    }).join('\n');
 
     return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -112,37 +193,20 @@ function generateLogbookHtml(records: LogbookRecord[]): string {
     body  { font-family: Arial, Helvetica, sans-serif; font-size: 8pt; color: #111; }
     h1    { font-size: 13pt; text-align: center; margin-bottom: 4px; }
     h2    { font-size: 9pt;  text-align: center; color: #555; margin-bottom: 8px; }
+    .page-container { margin-bottom: 8px; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     th    { background: #1e3a5f; color: #fff; font-size: 7pt; padding: 3px 2px; text-align: center; border: 1px solid #999; }
     td    { padding: 2px 2px; text-align: center; border: 1px solid #ccc; font-size: 7.5pt; }
     tr:nth-child(even) { background: #f5f8ff; }
-    tr.total-row td { background: #e8f0fe; font-weight: bold; border-top: 2px solid #1e3a5f; }
-    .sig  { margin-top: 20px; display: flex; justify-content: space-between; }
+    tr.subtotal-row td { background: #e8f0fe; font-weight: bold; border-top: 2px solid #1e3a5f; }
+    .sig  { margin-top: 10px; display: flex; justify-content: space-between; }
     .sig-box { border-top: 1px solid #333; width: 200px; padding-top: 4px; font-size: 8pt; color: #555; }
   </style>
 </head>
 <body>
   <h1>飞行记录本 PILOT LOGBOOK</h1>
   <h2>依据 CCAR-61 部 · 共 ${records.length} 条记录 · 导出时间: ${new Date().toLocaleString('zh-CN')}</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>计划日期</th><th>实际日期</th><th>机型</th><th>注册号</th>
-        <th>航段 Route</th>
-        <th>OFF UTC</th><th>TO UTC</th><th>LDG UTC</th><th>ON UTC</th>
-        <th>飞行时间 Total</th><th>PIC</th><th>SIC</th><th>带飞</th><th>教员</th>
-        <th>夜航</th><th>仪表</th><th>昼落</th><th>夜落</th>
-        <th>角色</th><th>进近类型</th>
-        <th>模拟机时间 Sim</th><th>备注</th>
-      </tr>
-    </thead>
-    <tbody>${rowsHtml}${totalRow}</tbody>
-  </table>
-  <div class="sig">
-    <div class="sig-box">飞行员签字 Pilot Signature ______</div>
-    <div class="sig-box">教员签字 Instructor Signature ______</div>
-    <div class="sig-box">审核人签字 Check Signature ______</div>
-  </div>
+  ${pagesHtml}
 </body>
 </html>`;
 }
@@ -151,32 +215,35 @@ function generateLogbookHtml(records: LogbookRecord[]): string {
 
 function recordsToXlsxRows(records: LogbookRecord[]) {
     return records.map(r => ({
-        '计划日期':    r.schdDate,
-        '实际日期':    r.actlDate,
-        '机型':        r.acftType,
-        '注册号':      r.regNo ?? '',
-        '航段/SIM':    r.dutyType === 'FLIGHT' ? r.routeString : (r.simNo ?? ''),
-        '航班号':      r.flightNo ?? '',
-        'OFF(UTC)':    r.offTimeUtc,
-        'TO(UTC)':     r.toTimeUtc ?? '',
-        'LDG(UTC)':    r.ldgTimeUtc ?? '',
-        'ON(UTC)':     r.onTimeUtc,
-        'Block(min)':  r.blockTimeMin,
-        'PIC(min)':    r.picMin,
-        'SIC(min)':    r.sicMin,
-        '带飞(min)':   r.dualMin,
-        '教员(min)':   r.instructorMin,
-        '夜航(min)':   r.nightFlightMin,
-        '仪表(min)':   r.instrumentMin,
-        '昼间落地':    r.dayLdg,
-        '夜间落地':    r.nightLdg,
-        '角色':        r.pilotRole ?? '',
-        '进近类型':    r.approachType ?? '',
-        'SIM等级':     r.simCat ?? '',
-        '训练机构':    r.trainingAgency ?? '',
-        '训练类型':    r.trainingType ?? '',
-        '备注':        r.exportRemarks,
-        'Block(H:M)':  minutesToHHMM(r.blockTimeMin),
+        '计划日期': r.schdDate,
+        '实际日期': r.actlDate,
+        '机型': r.acftType,
+        '注册号': r.regNo ?? '',
+        '航段/SIM': r.dutyType === 'FLIGHT' ? r.routeString : (r.simNo ?? ''),
+        '航班号': r.flightNo ?? '',
+        'OFF(UTC)': r.offTimeUtc,
+        'TO(UTC)': r.toTimeUtc ?? '',
+        'LDG(UTC)': r.ldgTimeUtc ?? '',
+        'ON(UTC)': r.onTimeUtc,
+        'Block(min)': r.blockTimeMin,
+        'PIC(min)': r.picMin,
+        'SIC(min)': r.sicMin,
+        '带飞(min)': r.dualMin,
+        '教员(min)': r.instructorMin,
+        '夜航(min)': r.nightFlightMin,
+        '仪表(min)': r.instrumentMin,
+        // PRD §5.3 col 13/14: keep as separate NUMERIC columns for Pivot Table use
+        '昼间起飞': r.safeDayTo,    // ← Phase 5 addition
+        '夜间起飞': r.safeNightTo,  // ← Phase 5 addition
+        '昼间落地': r.dayLdg,
+        '夜间落地': r.nightLdg,
+        '角色': r.pilotRole ?? '',
+        '进近类型': r.approachType ?? '',
+        'SIM等级': r.simCat ?? '',
+        '训练机构': r.trainingAgency ?? '',
+        '训练类型': r.trainingType ?? '',
+        '备注': r.exportRemarks,
+        'Block(H:M)': minutesToHHMM(r.blockTimeMin),
     }));
 }
 
@@ -323,7 +390,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>版本</Text>
-                <Text style={styles.infoValue}>V1.0.0 (Phase 4)</Text>
+                <Text style={styles.infoValue}>V1.1.0 (Phase 5)</Text>
             </View>
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>合规标准</Text>
