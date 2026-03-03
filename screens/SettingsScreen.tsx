@@ -351,16 +351,21 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             >
                 <Text style={styles.exportIcon}>📄</Text>
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>导出标准 PDF（打印版）</Text>
+                    <Text style={styles.exportTitle}>📄 导出标准 PDF 报表</Text>
                     <Text style={styles.exportDesc}>
-                        严格复刻 CCAR-61 标准列头，含飞行员/教员签字栏，可直接提交局方审查
+                        符合 CCAR-61 部标准，含教员签字栏，可直接打印提交局方审查
                     </Text>
                     <Text style={styles.exportCount}>
                         {logbooks.length} 条记录 · A4 横向
                     </Text>
                 </View>
                 {exportingPdf
-                    ? <ActivityIndicator size="small" color={COLORS.primary} />
+                    ? (
+                        <>
+                            <ActivityIndicator size="small" color={COLORS.primary} />
+                            <Text style={styles.exportLoadingText}>正在生成局方标准报表...</Text>
+                        </>
+                    )
                     : <Text style={styles.exportArrow}>›</Text>}
             </TouchableOpacity>
 
@@ -373,16 +378,21 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             >
                 <Text style={styles.exportIcon}>📊</Text>
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>导出 Excel（数据备份）</Text>
+                    <Text style={styles.exportTitle}>📊 导出原始 Excel 数据</Text>
                     <Text style={styles.exportDesc}>
-                        原始数据表格，含标准表头，用于个人备份与电脑端二次编辑
+                        供个人数据备份与电脑端二次分析，格式兼容 WPS / Microsoft Excel
                     </Text>
                     <Text style={styles.exportCount}>
                         {logbooks.length} 条记录 · .xlsx 格式
                     </Text>
                 </View>
                 {exportingExcel
-                    ? <ActivityIndicator size="small" color={COLORS.success} />
+                    ? (
+                        <>
+                            <ActivityIndicator size="small" color={COLORS.success} />
+                            <Text style={styles.exportLoadingText}>正在生成数据文件...</Text>
+                        </>
+                    )
                     : <Text style={styles.exportArrow}>›</Text>}
             </TouchableOpacity>
 
@@ -404,6 +414,11 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 <Text style={styles.infoLabel}>总记录数</Text>
                 <Text style={styles.infoValue}>{logbooks.length} 条</Text>
             </View>
+
+            {/* Offline privacy disclaimer */}
+            <Text style={styles.offlineDisclaimer}>
+                当前为纯本地离线模式。您的所有飞行数据均存储于本设备，未连接任何外部云端，彻底保障数据隐私。
+            </Text>
         </ScrollView>
     );
 };
@@ -465,6 +480,24 @@ const styles = StyleSheet.create({
     },
     infoLabel: { color: COLORS.textSecondary, fontSize: 14 },
     infoValue: { color: COLORS.text, fontSize: 14, fontWeight: '500' },
+
+    // Loading text next to spinner while generating files
+    exportLoadingText: {
+        color: COLORS.textSecondary,
+        fontSize: 11,
+        marginLeft: 8,
+    },
+
+    // Offline privacy disclaimer (bottom of 关于 section)
+    offlineDisclaimer: {
+        color: COLORS.textSecondary,
+        fontSize: 11,
+        textAlign: 'center',
+        lineHeight: 18,
+        marginTop: 16,
+        marginHorizontal: 8,
+        opacity: 0.7,
+    },
 });
 
 export default SettingsScreen;

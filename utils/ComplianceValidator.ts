@@ -292,14 +292,13 @@ export function validate90DayExperience(
 
     // 🔴 RED: either combined total is zero
     if (totalTo === 0 || totalLdg === 0) {
-        const zeroType = totalTo === 0 ? '起飞' : '落地';
         return {
             dayTo, nightTo, totalTo,
             dayLdg, nightLdg, totalLdg,
             alertLevel: 'red',
             alertMessage:
-                `🔴 近90天${zeroType}总次数为 0！` +
-                `根据 CCAR-61 规定，您可能不具备当前机型的运行资格，请立即联系运行部门确认。`,
+                '资质告警：过去 90 天内起飞或落地次数为零，近期经历不满足 CCAR 运行要求，' +
+                '请及时安排本场或模拟机训练。',
         };
     }
 
@@ -313,8 +312,8 @@ export function validate90DayExperience(
             dayLdg, nightLdg, totalLdg,
             alertLevel: 'yellow',
             alertMessage:
-                `⚠️ 近90天起降次数偏少（${lowItems.join('、')}），` +
-                `请注意保持近期经历，避免丧失运行资格。`,
+                `资质预警：过去 90 天内${lowItems.join('、')}，未满足 3 次要求，` +
+                '近期经历即将失效，请关注。',
         };
     }
 

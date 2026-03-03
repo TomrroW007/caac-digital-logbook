@@ -172,7 +172,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                         onPress={() => navigation.navigate('EntryForm')}
                         testID="btn-new-entry"
                     >
-                        <Text style={styles.primaryActionText}>+ 新建记录</Text>
+                        <Text style={styles.primaryActionText}>+ 新增记录</Text>
                     </TouchableOpacity>
 
                     <View style={styles.secondaryActions}>
@@ -181,14 +181,14 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                             onPress={() => navigation.navigate('Timeline')}
                             testID="btn-timeline"
                         >
-                            <Text style={styles.secondaryActionText}>📋 历史记录</Text>
+                            <Text style={styles.secondaryActionText}>历史记录</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.secondaryAction}
                             onPress={() => navigation.navigate('Settings')}
                             testID="btn-settings"
                         >
-                            <Text style={styles.secondaryActionText}>📤 导出设置</Text>
+                            <Text style={styles.secondaryActionText}>导出与设置</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

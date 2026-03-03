@@ -584,10 +584,10 @@ export const DualTrackForm: React.FC<Props> = ({
                         {(depHasDst || arrHasDst) && (
                             <View style={styles.dstBanner}>
                                 <Text style={styles.dstBannerTitle}>
-                                    ⚠️ 夏令时 (DST) 提醒
+                                    💡 时差提示：可能实行夏令时 (DST)
                                 </Text>
                                 <Text style={styles.dstBannerText}>
-                                    检测到目的地/出发地可能实行夏令时，请确认并手动调整 UTC 偏移量。
+                                    系统推算 UTC 偏移量仅供参考，请核对并按需微调 ⏷。
                                 </Text>
                                 {depHasDst && (
                                     <View style={styles.dstOffsetRow}>

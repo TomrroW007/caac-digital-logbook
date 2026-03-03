@@ -56,11 +56,11 @@ const TimelineScreenBase: React.FC<TimelineProps> = ({ logbooks }) => {
     const handleDelete = (record: LogbookRecord) => {
         Alert.alert(
             '删除记录',
-            `确认删除 ${record.actlDate} 的这条记录？此操作不可撤销。`,
+            '确定要删除该条飞行记录吗？删除后将无法在看板和报表中统计。',
             [
                 { text: '取消', style: 'cancel' },
                 {
-                    text: '删除',
+                    text: '确认删除',
                     style: 'destructive',
                     onPress: () => {
                         database.write(async () => {
@@ -128,7 +128,7 @@ const TimelineScreenBase: React.FC<TimelineProps> = ({ logbooks }) => {
                         <Text style={styles.emptyIcon}>📋</Text>
                         <Text style={styles.emptyTitle}>暂无飞行记录</Text>
                         <Text style={styles.emptySubtitle}>
-                            点击首页「+ 新建记录」开始录入
+                            点击下方「+」号开始记录您的第一段飞行。
                         </Text>
                     </View>
                 }
