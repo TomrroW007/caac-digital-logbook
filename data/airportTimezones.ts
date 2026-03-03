@@ -281,5 +281,49 @@ export function listKnownAirports(): string[] {
     return Object.keys(AIRPORT_TIMEZONES).sort();
 }
 
+/**
+ * Returns true if the airport is in a DST-observing region, meaning the UI
+ * should show the manual UTC-offset override prompt (PRD V1.1 §2.3).
+ *
+ * Design: **exclusion approach** — we explicitly enumerate the Asian/Middle-East
+ * ICAO-prefix regions that do NOT observe DST and return false for them. All
+ * other prefixes default to true (safer: better to show an unnecessary prompt
+ * than to silently store a wrong UTC offset for a pilot on international ops).
+ *
+ * Non-DST prefixes (returns false, no prompt shown):
+ *   Z  — China Mainland (all UTC+8, no DST by law since 1992)
+ *   V  — South/Southeast Asia (HK VHHH, Macau VMMC, Thailand VT**, Vietnam VV**)
+ *   R  — West Pacific (Japan RJ*, South Korea RK*, Taiwan RC*, Philippines RP*)
+ *   W  — Southeast Asia maritime (Singapore WS**, Malaysia WM**, Indonesia WA**)
+ *   O  — Middle East (Dubai OM**, Doha OT**, Riyadh OE**, Kuwait OK**)
+ *
+ * DST-possible prefixes (returns true, prompt shown for manual confirmation):
+ *   E  — Northern/Central Europe (EGLL London, EDDF Frankfurt, EHAM Amsterdam …)
+ *   L  — Southern Europe & Mediterranean (LFPG Paris, LIRF Rome, LLBG Tel Aviv …)
+ *   K  — Contiguous USA (KJFK New York, KLAX Los Angeles …)
+ *   C  — Canada (CYVR Vancouver, CYYZ Toronto …)
+ *   Y  — Australia (YSSY Sydney, YMML Melbourne — AEDT in summer)
+ *   N  — New Zealand (NZAA Auckland, observes NZDT in summer)
+ *   …and any other prefix not listed above.
+ *
+ * @param icao - 4-character ICAO code (case-insensitive).
+ * @returns false if the region is known not to observe DST; true otherwise.
+ *
+ * @example
+ * isDstObservingRegion('ZBAA')  // → false  (China, Z-prefix)
+ * isDstObservingRegion('VHHH')  // → false  (Hong Kong, V-prefix)
+ * isDstObservingRegion('RJTT')  // → false  (Tokyo, R-prefix)
+ * isDstObservingRegion('OMDB')  // → false  (Dubai, O-prefix)
+ * isDstObservingRegion('KJFK')  // → true   (New York, K-prefix, observes EST/EDT)
+ * isDstObservingRegion('EGLL')  // → true   (London, E-prefix, observes GMT/BST)
+ * isDstObservingRegion('LFPG')  // → true   (Paris, L-prefix, observes CET/CEST)
+ */
+export function isDstObservingRegion(icao: string): boolean {
+    if (!icao || icao.length < 1) return false;
+    const prefix = icao[0].toUpperCase();
+    const NON_DST_PREFIXES = new Set(['Z', 'V', 'R', 'W', 'O']);
+    return !NON_DST_PREFIXES.has(prefix);
+}
+
 export { AIRPORT_TIMEZONES };
 export type { UtcOffsetMinutes };

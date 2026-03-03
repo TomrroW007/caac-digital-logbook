@@ -38,15 +38,29 @@ export type ValidationResult = {
 export type ExperienceAlertLevel = 'ok' | 'yellow' | 'red';
 
 /**
- * 90-day landing experience report.
- * PRD §4.2: 昼/夜落地任一项 ≤ 3 次触发黄牌，= 0 次触发红牌。
+ * 90-day takeoff & landing experience report.
+ *
+ * PRD V1.1 §4.2 (CCAR-121.435 — SME corrected):
+ *   Alert thresholds operate on COMBINED totals (day+night) — NOT per-category.
+ *   A pure daytime pilot with 10 day T/Os and 10 day landings is GREEN.
+ *
+ *   totalTo  = day_to + night_to ≥ 4 → green
+ *   totalLdg = day_ldg + night_ldg ≥ 4 → green
  */
 export type ExperienceReport = {
+    /** Total daytime takeoffs in the last 90 days. */
+    dayTo: number;
+    /** Total nighttime takeoffs in the last 90 days. */
+    nightTo: number;
+    /** Total combined takeoffs (day + night) in the last 90 days. */
+    totalTo: number;
     /** Total daytime landings in the last 90 days. */
     dayLdg: number;
     /** Total nighttime landings in the last 90 days. */
     nightLdg: number;
-    /** Computed alert level based on PRD thresholds. */
+    /** Total combined landings (day + night) in the last 90 days. */
+    totalLdg: number;
+    /** Computed alert level based on PRD V1.1 thresholds. */
     alertLevel: ExperienceAlertLevel;
     /** Human-readable alert message (Chinese). */
     alertMessage: string;
@@ -213,81 +227,102 @@ export function validateFlightRecord(data: FlightRecordInput): ValidationResult 
 
 /**
  * Minimal shape of a record needed for 90-day experience calculation.
- * Callers should pre-filter to only FLIGHT records (duty_type = 'FLIGHT')
+ *
+ * Callers should pre-filter to FLIGHT records (duty_type = 'FLIGHT')
  * that are not soft-deleted (is_deleted = false) within the last 90 days.
+ *
+ * Use LogbookRecord.safeDayTo / safeNightTo when building these from model objects
+ * to ensure null-coalescing on pre-v3 migrated rows.
  */
-export type LandingRecord = {
+export type ExperienceRecord = {
+    /** Daytime takeoff count for this flight. */
+    dayTo: number;
+    /** Nighttime takeoff count for this flight. */
+    nightTo: number;
+    /** Daytime landing count for this flight. */
     dayLdg: number;
+    /** Nighttime landing count for this flight. */
     nightLdg: number;
 };
 
 /**
- * Computes the 90-day experience report from a collection of landing records.
+ * @deprecated Use ExperienceRecord instead.
+ * Kept for backward compatibility with callers passing only landing data.
+ */
+export type LandingRecord = Pick<ExperienceRecord, 'dayLdg' | 'nightLdg'>;
+
+/**
+ * Computes the 90-day experience report from a collection of flight records.
  *
- * PRD §4.2 alert thresholds:
- *  - 🔴 RED  (red block): Day OR Night landings = 0
- *  - 🟡 YELLOW (warning): Day OR Night landings > 0 AND ≤ 3
- *  - 🟢 OK               : Day AND Night landings both > 3
+ * PRD V1.1 §4.2 alert thresholds — CORRECTED by CAAC SME:
+ *   Operates on COMBINED totals (day+night), NOT per-category.
+ *   Rationale: CCAR-121 only requires total T/O and landing counts, not night-specific.
+ *   A pure daytime pilot with 10 day T/Os + 10 day landings MUST show GREEN.
  *
- * @param records - Array of landing records from the last 90 days.
- *                  Must be pre-filtered by the caller:
- *                  duty_type = 'FLIGHT', is_deleted = false, actl_date >= 90 days ago.
- * @returns ExperienceReport with totals and alert level.
+ *   - 🔴 RED    (blocking): totalTo === 0 OR totalLdg === 0
+ *   - 🟡 YELLOW (warning):  totalTo ≤ 3 OR totalLdg ≤ 3 (but neither is 0)
+ *   - 🟢 OK              :  totalTo ≥ 4 AND totalLdg ≥ 4
+ *
+ * @param records - Array of records from the last 90 days.
+ *                  Must be pre-filtered: duty_type='FLIGHT', is_deleted=false,
+ *                  actl_date >= get90DayBoundaryDate().
+ * @returns ExperienceReport with per-category sub-totals, combined totals, and alert level.
  *
  * @example
- * // 2 day landings, 1 night landing → both ≤ 3 → yellow
- * validate90DayExperience([
- *   { dayLdg: 1, nightLdg: 1 },
- *   { dayLdg: 1, nightLdg: 0 },
- * ])
- * // → { dayLdg: 2, nightLdg: 1, alertLevel: 'yellow', alertMessage: '...' }
+ * // Pure daytime pilot: 5 day T/Os, 0 night T/Os, 5 day LDGs, 0 night LDGs
+ * // totalTo=5, totalLdg=5 → GREEN (correct per CCAR-121)
+ * validate90DayExperience([{ dayTo: 5, nightTo: 0, dayLdg: 5, nightLdg: 0 }])
+ * // → { totalTo: 5, totalLdg: 5, alertLevel: 'ok', ... }
  *
- * // 0 night landings → red
- * validate90DayExperience([
- *   { dayLdg: 5, nightLdg: 0 },
- * ])
- * // → { dayLdg: 5, nightLdg: 0, alertLevel: 'red', alertMessage: '...' }
+ * @example
+ * // No takeoffs at all
+ * validate90DayExperience([{ dayTo: 0, nightTo: 0, dayLdg: 5, nightLdg: 3 }])
+ * // → { totalTo: 0, totalLdg: 8, alertLevel: 'red', ... }
  */
 export function validate90DayExperience(
-    records: LandingRecord[]
+    records: ExperienceRecord[]
 ): ExperienceReport {
+    const dayTo = records.reduce((sum, r) => sum + (r.dayTo ?? 0), 0);
+    const nightTo = records.reduce((sum, r) => sum + (r.nightTo ?? 0), 0);
     const dayLdg = records.reduce((sum, r) => sum + (r.dayLdg ?? 0), 0);
     const nightLdg = records.reduce((sum, r) => sum + (r.nightLdg ?? 0), 0);
 
-    // RED: either day or night landings is zero
-    if (dayLdg === 0 || nightLdg === 0) {
-        const zeroType = dayLdg === 0 ? '昼间' : '夜间';
+    const totalTo = dayTo + nightTo;
+    const totalLdg = dayLdg + nightLdg;
+
+    // 🔴 RED: either combined total is zero
+    if (totalTo === 0 || totalLdg === 0) {
         return {
-            dayLdg,
-            nightLdg,
+            dayTo, nightTo, totalTo,
+            dayLdg, nightLdg, totalLdg,
             alertLevel: 'red',
             alertMessage:
-                `🔴 近90天${zeroType}落地次数为 0！` +
-                `根据 CCAR-61 规定，您可能不具备当前机型的运行资格，请立即联系运行部门确认。`,
+                '资质告警：过去 90 天内起飞或落地次数为零，近期经历不满足 CCAR 运行要求，' +
+                '请及时安排本场或模拟机训练。',
         };
     }
 
-    // YELLOW: either day or night landings is ≤ 3 (but neither is 0)
-    if (dayLdg <= 3 || nightLdg <= 3) {
-        const lowType: string[] = [];
-        if (dayLdg <= 3) lowType.push(`昼间 ${dayLdg} 次`);
-        if (nightLdg <= 3) lowType.push(`夜间 ${nightLdg} 次`);
+    // 🟡 YELLOW: either combined total ≤ 3 (but neither is 0)
+    if (totalTo <= 3 || totalLdg <= 3) {
+        const lowItems: string[] = [];
+        if (totalTo <= 3) lowItems.push(`起飞 ${totalTo} 次`);
+        if (totalLdg <= 3) lowItems.push(`落地 ${totalLdg} 次`);
         return {
-            dayLdg,
-            nightLdg,
+            dayTo, nightTo, totalTo,
+            dayLdg, nightLdg, totalLdg,
             alertLevel: 'yellow',
             alertMessage:
-                `⚠️ 近90天落地次数偏少（${lowType.join('、')}），` +
-                `请注意保持近期经历，避免丧失运行资格。`,
+                `资质预警：过去 90 天内${lowItems.join('、')}，未满足 3 次要求，` +
+                '近期经历即将失效，请关注。',
         };
     }
 
-    // OK: both > 3
+    // 🟢 OK: both totals ≥ 4
     return {
-        dayLdg,
-        nightLdg,
+        dayTo, nightTo, totalTo,
+        dayLdg, nightLdg, totalLdg,
         alertLevel: 'ok',
-        alertMessage: `✅ 近90天昼间 ${dayLdg} 次、夜间 ${nightLdg} 次，近期经历符合要求。`,
+        alertMessage: `✅ 近90天起飞 ${totalTo} 次、落地 ${totalLdg} 次，近期经历符合要求。`,
     };
 }
 
@@ -295,23 +330,31 @@ export function validate90DayExperience(
 
 /**
  * Returns the ISO date string (YYYY-MM-DD) for exactly 90 days ago from today,
- * based on the device's LOCAL calendar date (PRD §4.2: "取设备当前时区的自然日零点").
+ * **pinned to Beijing Time (UTC+8)** as required by PRD V1.1 §4.2.
  *
- * This is used by the WatermelonDB query layer to build:
- *   WHERE actl_date >= get90DayBoundaryDate()
+ * Rationale: Pilots on international routes may have their device clock auto-switch
+ * timezone. Using device-local time would cause the 90-day boundary to shift by
+ * up to 12+ hours, causing spurious yellow/red card oscillations at the threshold.
+ * Beijing Time is the CAAC standard reference for near-recency audits.
  *
  * @param nowMs - Current timestamp in ms (defaults to Date.now()). Overridable for testing.
- * @returns YYYY-MM-DD string for 90 days ago (local date).
+ * @returns YYYY-MM-DD string for 90 days ago in Beijing Time (UTC+8).
  *
  * @example
- * // If today is 2024-06-01:
- * get90DayBoundaryDate() // → "2024-03-03"
+ * // Pilot lands in Los Angeles, device switches to US/Pacific (UTC-8).
+ * // If nowMs = 2024-03-01T16:30:00Z (Beijing: 2024-03-02T00:30:00+08):
+ * get90DayBoundaryDate(Date.parse('2024-03-01T16:30:00Z'))
+ * // → "2023-12-03"  (90 days before 2024-03-02 in Beijing time)
+ * // NOT "2023-12-02" (which would result from using UTC midnight)
  */
 export function get90DayBoundaryDate(nowMs: number = Date.now()): string {
-    const d = new Date(nowMs);
-    d.setDate(d.getDate() - 90);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    // Shift the timestamp to "Beijing virtual UTC" by adding UTC+8 offset.
+    // Then use UTC methods, which now reflect Beijing calendar date.
+    const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000; // UTC+8
+    const beijingNow = new Date(nowMs + BEIJING_OFFSET_MS);
+    beijingNow.setUTCDate(beijingNow.getUTCDate() - 90);
+    const year = beijingNow.getUTCFullYear();
+    const month = String(beijingNow.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(beijingNow.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
 }

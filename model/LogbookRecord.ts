@@ -99,13 +99,32 @@ export class LogbookRecord extends Model {
 
     // ── Role & Approach ───────────────────────────────────────────────────────────
 
-    /** Pilot role — 'PF' or 'PM'. Optional. */
+    /**
+     * Pilot role during the flight.
+     * - 'PF' (Pilot Flying): controlling the aircraft.
+     * - 'PM' (Pilot Monitoring): managing systems and communications.
+     * - 'PICUS' (Pilot-In-Command Under Supervision): 机长受监视飞行.
+     *   This time is recorded as PIC time but MUST be annotated in remarks
+     *   for ATPL applications per CCAR-61.
+     */
     @field('pilot_role') declare pilotRole: PilotRole | null;
 
     /** Approach type (e.g. "ILS", "VOR", "RNAV"). Optional. */
     @field('approach_type') declare approachType: string | null;
 
-    // ── Landing Counts ────────────────────────────────────────────────────────────
+    // ── Takeoff & Landing Counts (PRD V1.1 §六) ──────────────────────────────
+
+    /**
+     * Daytime takeoff count. INTEGER (null for pre-v3 migrated rows).
+     * ALWAYS use `safeDayTo` in business logic to get a guaranteed 0 instead of null.
+     */
+    @field('day_to') declare dayTo: number | null;
+
+    /**
+     * Nighttime takeoff count. INTEGER (null for pre-v3 migrated rows).
+     * ALWAYS use `safeNightTo` in business logic.
+     */
+    @field('night_to') declare nightTo: number | null;
 
     /** Number of daytime landings. INTEGER, default 0. */
     @field('day_ldg') declare dayLdg: number;
@@ -183,14 +202,40 @@ export class LogbookRecord extends Model {
     }
 
     /**
-     * Remarks column string for export (column 16 in PRD §5.3).
-     * Concatenates flight number and free-text remarks with " | " separator.
+     * Remarks column string for export (column 16 in PRD V1.1 §5.3).
+     * Null-safe concatenation of flightNo, pilotRole, and free-text remarks.
+     * Uses filter(Boolean) to silently drop any null/undefined parts.
+     *
+     * @example
+     * // flightNo='CA1501', pilotRole='PICUS', remarks='气象雷达不工作'
+     * // → 'CA1501 PICUS 气象雷达不工作'
+     *
+     * @example
+     * // flightNo=null, pilotRole='PF', remarks=null
+     * // → 'PF'  (no null fragments)
      */
     get exportRemarks(): string {
-        const parts: string[] = [];
-        if (this.flightNo) parts.push(this.flightNo);
-        if (this.remarks) parts.push(this.remarks);
-        return parts.join(' | ');
+        return [this.flightNo, this.pilotRole, this.remarks]
+            .filter(Boolean)
+            .join(' ');
+    }
+
+    // ─── Null-Safe Takeoff Count Getters ─────────────────────────
+
+    /**
+     * Safe accessor for daytime takeoff count.
+     * Coalesces null (pre-v3 migrated rows) to 0 for business logic.
+     */
+    get safeDayTo(): number {
+        return this.dayTo ?? 0;
+    }
+
+    /**
+     * Safe accessor for nighttime takeoff count.
+     * Coalesces null (pre-v3 migrated rows) to 0 for business logic.
+     */
+    get safeNightTo(): number {
+        return this.nightTo ?? 0;
     }
 
     // ─── Compliance Methods ────────────────────────────────────────────────────

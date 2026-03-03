@@ -336,3 +336,98 @@ describe('isRoleTimeSumValid', () => {
         expect(isRoleTimeSumValid({ blockTimeMin: 150, picMin: 40, sicMin: 40, dualMin: 35, instructorMin: 36 })).toBe(false);
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. isNightHintTime (PRD V1.1 §3.2 — night-flight field highlight)
+//
+//    QA-mandated test matrix: partial inputs MUST return false to prevent
+//    UI flicker. Only complete 4-digit inputs with hours ≥ 19 return true.
+// ─────────────────────────────────────────────────────────────────────────────
+import { isNightHintTime } from '../TimeCalculator';
+
+describe('isNightHintTime', () => {
+
+    describe('✅ QA-MANDATED: boundary at exactly 19:00', () => {
+        it('isNightHintTime("1859") → false  (18:59, one minute before threshold)', () => {
+            expect(isNightHintTime('1859')).toBe(false);
+        });
+
+        it('isNightHintTime("1900") → true   (exactly 19:00 — threshold)', () => {
+            expect(isNightHintTime('1900')).toBe(true);
+        });
+    });
+
+    describe('✅ QA-MANDATED: partial inputs must NOT trigger hint (anti-flicker)', () => {
+        it('isNightHintTime("19") → false   (partial — user still typing minutes)', () => {
+            expect(isNightHintTime('19')).toBe(false);
+        });
+
+        it('isNightHintTime("1") → false    (too short)', () => {
+            expect(isNightHintTime('1')).toBe(false);
+        });
+
+        it('isNightHintTime("190") → false  (3 digits, partial)', () => {
+            expect(isNightHintTime('190')).toBe(false);
+        });
+
+        it('isNightHintTime("") → false     (empty string)', () => {
+            expect(isNightHintTime('')).toBe(false);
+        });
+    });
+
+    describe('daytime inputs (< 19:00) → false', () => {
+        it('"0000" → false (midnight start)', () => {
+            expect(isNightHintTime('0000')).toBe(false);
+        });
+
+        it('"0830" → false (morning departure)', () => {
+            expect(isNightHintTime('0830')).toBe(false);
+        });
+
+        it('"1800" → false (18:00, before threshold)', () => {
+            expect(isNightHintTime('1800')).toBe(false);
+        });
+    });
+
+    describe('night-time inputs (≥ 19:00) → true', () => {
+        it('"2130" → true  (21:30, late evening)', () => {
+            expect(isNightHintTime('2130')).toBe(true);
+        });
+
+        it('"2359" → true  (23:59, latest valid time)', () => {
+            expect(isNightHintTime('2359')).toBe(true);
+        });
+
+        it('"19:00" (with colon, pasted value) → true', () => {
+            // Non-digits stripped → "1900" → true
+            expect(isNightHintTime('19:00')).toBe(true);
+        });
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. localTimeToUtcISO — cross-midnight date rollback proof (QA-mandated)
+//
+//    PRD V1.1 §3.2 "跨零点绝对推算": when a local midnight input (00:05 UTC+8)
+//    maps to the previous UTC day, the ISO string MUST carry the correct date.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('localTimeToUtcISO — cross-midnight date rollback proof', () => {
+
+    it('✅ QA-MANDATED: 2026-03-02 00:05 LT (UTC+8) → 2026-03-01T16:05:00.000Z', () => {
+        // Scenario: Pilot records chock-off at 00:05 local on March 2, UTC+8.
+        // UTC+8 → UTC 16:05 on March 1. The date must roll back to 2026-03-01.
+        const result = localTimeToUtcISO('2026-03-02', '0005', 480);
+        expect(result).toBe('2026-03-01T16:05:00.000Z');
+    });
+
+    it('local midnight (00:00 UTC+8) → previous day 16:00 UTC', () => {
+        const result = localTimeToUtcISO('2026-03-02', '0000', 480);
+        expect(result).toBe('2026-03-01T16:00:00.000Z');
+    });
+
+    it('local 00:05 UTC-5 → same-day 05:05 UTC (no rollback for west zones)', () => {
+        // West of UTC: subtracting a negative offset ADDS hours — date stays same.
+        const result = localTimeToUtcISO('2026-03-02', '0005', -300);
+        expect(result).toBe('2026-03-02T05:05:00.000Z');
+    });
+});
