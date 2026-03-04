@@ -11,6 +11,7 @@ import {
     TouchableOpacity,
     StyleSheet,
     StatusBar,
+    Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -102,6 +103,15 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
         <View style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
             <ScrollView contentContainerStyle={styles.content}>
+
+                {/* Web-only: iOS ITP data-loss warning — PRD PWA §4 */}
+                {Platform.OS === 'web' && (
+                    <View style={styles.itpWarning}>
+                        <Text style={styles.itpWarningText}>
+                            ⚠️ Web 版数据缓存在浏览器中。若长期未使用（iOS 限制 7 天）或清理缓存，数据可能丢失。请定期进入【设置与导出】生成 Excel 备份！
+                        </Text>
+                    </View>
+                )}
 
                 {/* Header */}
                 <View style={styles.header}>
@@ -287,4 +297,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     secondaryActionText: { color: COLORS.text, fontSize: 14, fontWeight: '600' },
+
+    // Web-only: iOS ITP data-loss warning banner
+    itpWarning: {
+        backgroundColor: '#332B00',
+        borderWidth: 1,
+        borderColor: '#F59E0B',
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 16,
+    },
+    itpWarningText: {
+        color: '#FDE68A',
+        fontSize: 12,
+        lineHeight: 18,
+    },
 });

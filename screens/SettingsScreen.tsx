@@ -22,10 +22,19 @@ import {
     ScrollView,
     Alert,
     ActivityIndicator,
+    Platform,
 } from 'react-native';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+
+// Native-only imports: guarded by Platform.OS checks at call sites.
+// On web these modules are stubs / unused — the web export path uses browser APIs.
+let Print: typeof import('expo-print') | undefined;
+let Sharing: typeof import('expo-sharing') | undefined;
+let FileSystem: typeof import('expo-file-system') | undefined;
+if (Platform.OS !== 'web') {
+    Print = require('expo-print');
+    Sharing = require('expo-sharing');
+    FileSystem = require('expo-file-system');
+}
 import { Q } from '@nozbe/watermelondb';
 import withObservables from '@nozbe/with-observables';
 import * as XLSX from 'xlsx';
@@ -285,22 +294,37 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             Alert.alert('无记录', '暂无可导出的飞行记录。');
             return;
         }
-        const canShare = await Sharing.isAvailableAsync();
-        if (!canShare) {
-            Alert.alert('不支持', '当前设备不支持文件分享功能。');
-            return;
-        }
         setExportingPdf(true);
         try {
             const html = generateLogbookHtml(logbooks);
-            const { uri } = await Print.printToFileAsync({ html, base64: false });
-            const destUri = `${FileSystem.cacheDirectory}logbook_${Date.now()}.pdf`;
-            await FileSystem.moveAsync({ from: uri, to: destUri });
-            await Sharing.shareAsync(destUri, {
-                mimeType: 'application/pdf',
-                dialogTitle: '导出 CCAR-61 飞行记录本 PDF',
-                UTI: 'com.adobe.pdf',
-            });
+
+            if (Platform.OS === 'web') {
+                // Web: open a new window with the raw HTML, then print
+                const printWindow = window.open('', '_blank');
+                if (!printWindow) {
+                    Alert.alert('弹窗被拦截', '请允许弹出窗口后重试。');
+                    return;
+                }
+                printWindow.document.write(html);
+                printWindow.document.close();
+                printWindow.focus();
+                printWindow.print();
+            } else {
+                // Native: expo-print → file → share sheet
+                const canShare = await Sharing!.isAvailableAsync();
+                if (!canShare) {
+                    Alert.alert('不支持', '当前设备不支持文件分享功能。');
+                    return;
+                }
+                const { uri } = await Print!.printToFileAsync({ html, base64: false });
+                const destUri = `${FileSystem!.cacheDirectory}logbook_${Date.now()}.pdf`;
+                await FileSystem!.moveAsync({ from: uri, to: destUri });
+                await Sharing!.shareAsync(destUri, {
+                    mimeType: 'application/pdf',
+                    dialogTitle: '导出 CCAR-61 飞行记录本 PDF',
+                    UTI: 'com.adobe.pdf',
+                });
+            }
         } catch (err) {
             console.error('[SettingsScreen] PDF export error:', err);
             Alert.alert('导出失败', 'PDF 生成时发生错误，请重试。');
@@ -315,28 +339,35 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             Alert.alert('无记录', '暂无可导出的飞行记录。');
             return;
         }
-        const canShare = await Sharing.isAvailableAsync();
-        if (!canShare) {
-            Alert.alert('不支持', '当前设备不支持文件分享功能。');
-            return;
-        }
         setExportingExcel(true);
         try {
             const rows = recordsToXlsxRows(logbooks);
             const ws = XLSX.utils.json_to_sheet(rows);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Logbook');
-            const b64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' }) as string;
-            const destUri = `${FileSystem.cacheDirectory}logbook_${Date.now()}.xlsx`;
-            await FileSystem.writeAsStringAsync(destUri, b64, {
-                encoding: FileSystem.EncodingType.Base64,
-            });
-            await Sharing.shareAsync(destUri, {
-                mimeType:
-                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                dialogTitle: '导出飞行记录本 Excel',
-                UTI: 'com.microsoft.excel.xlsx',
-            });
+
+            if (Platform.OS === 'web') {
+                // Web: SheetJS writeFile triggers browser download directly
+                XLSX.writeFile(wb, `Logbook_${Date.now()}.xlsx`);
+            } else {
+                // Native: write base64 to file system, then share
+                const canShare = await Sharing!.isAvailableAsync();
+                if (!canShare) {
+                    Alert.alert('不支持', '当前设备不支持文件分享功能。');
+                    return;
+                }
+                const b64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' }) as string;
+                const destUri = `${FileSystem!.cacheDirectory}logbook_${Date.now()}.xlsx`;
+                await FileSystem!.writeAsStringAsync(destUri, b64, {
+                    encoding: FileSystem!.EncodingType.Base64,
+                });
+                await Sharing!.shareAsync(destUri, {
+                    mimeType:
+                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    dialogTitle: '导出飞行记录本 Excel',
+                    UTI: 'com.microsoft.excel.xlsx',
+                });
+            }
         } catch (err) {
             console.error('[SettingsScreen] Excel export error:', err);
             Alert.alert('导出失败', 'Excel 生成时发生错误，请重试。');
