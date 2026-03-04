@@ -529,16 +529,6 @@ export const DualTrackForm: React.FC<Props> = ({
                 numberOfLines={3}
                 testID="input-remarks"
             />
-            {/* PRD §3.2: one-tap PICUS append — idempotent */}
-            {dutyType === 'FLIGHT' && (
-                <TouchableOpacity
-                    style={styles.picusBtn}
-                    onPress={handleAddPicus}
-                    testID="btn-add-picus"
-                >
-                    <Text style={styles.picusBtnText}>＋ PICUS</Text>
-                </TouchableOpacity>
-            )}
         </View>
     );
 
