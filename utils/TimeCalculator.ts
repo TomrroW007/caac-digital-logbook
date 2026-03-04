@@ -309,7 +309,7 @@ export function inferOffOn(
  * independently of the WatermelonDB model.
  *
  * PRD §4.1 red-line formula:
- *   PIC + SIC + DUAL + INSTRUCTOR <= BLOCK_TIME
+ *   PIC + PIC_US + SPIC + SIC + DUAL + INSTRUCTOR <= BLOCK_TIME
  *
  * @returns  true if the record is compliant, false if it should be blocked.
  *
@@ -323,12 +323,14 @@ export function inferOffOn(
 export function isRoleTimeSumValid(params: {
     blockTimeMin: number;
     picMin: number;
+    picUsMin?: number;
+    spicMin?: number;
     sicMin: number;
     dualMin: number;
     instructorMin: number;
 }): boolean {
-    const { blockTimeMin, picMin, sicMin, dualMin, instructorMin } = params;
-    return picMin + sicMin + dualMin + instructorMin <= blockTimeMin;
+    const { blockTimeMin, picMin, picUsMin = 0, spicMin = 0, sicMin, dualMin, instructorMin } = params;
+    return picMin + picUsMin + spicMin + sicMin + dualMin + instructorMin <= blockTimeMin;
 }
 
 // ─── 7. Night-Hint Threshold ──────────────────────────────────────────────────

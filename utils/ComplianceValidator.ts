@@ -76,6 +76,10 @@ export type FlightRecordInput = {
     dutyType: 'FLIGHT' | 'SIMULATOR';
     blockTimeMin: number;
     picMin: number;
+    /** PIC Under Supervision (機长受监视) time. Optional; 0 for pre-v4 records. */
+    picUsMin?: number;
+    /** Student-PIC (见习機长) time. Optional; 0 for pre-v4 records. */
+    spicMin?: number;
     sicMin: number;
     dualMin: number;
     instructorMin: number;
@@ -155,7 +159,7 @@ export function validateFlightRecord(data: FlightRecordInput): ValidationResult 
     if (!data.offUtcISO) {
         errors.push({
             field: 'off_time_utc',
-            message: '撤轮挡时刻 (OFF) 不能为空。',
+            message: '撤轮档时刻 (OFF) 不能为空。',
             code: 'REQUIRED_FIELD_MISSING',
         });
     }
@@ -163,7 +167,7 @@ export function validateFlightRecord(data: FlightRecordInput): ValidationResult 
     if (!data.onUtcISO) {
         errors.push({
             field: 'on_time_utc',
-            message: '挡轮挡时刻 (ON) 不能为空。',
+            message: '挡轮档时刻 (ON) 不能为空。',
             code: 'REQUIRED_FIELD_MISSING',
         });
     }
@@ -173,7 +177,7 @@ export function validateFlightRecord(data: FlightRecordInput): ValidationResult 
     if (data.blockTimeMin <= 0) {
         errors.push({
             field: 'block_time_min',
-            message: '总时长 (Block Time) 必须大于 0，请检查 OFF/ON 时刻是否正确。',
+            message: '飞行时间 (Block Time) 必须大于 0，请检查 OFF/ON 时刻是否正确。',
             code: 'BLOCK_TIME_NOT_POSITIVE',
         });
     }
@@ -181,16 +185,21 @@ export function validateFlightRecord(data: FlightRecordInput): ValidationResult 
     // ── PRD §4.1 compliance red-line ──────────────────────────────────────────
 
     const roleTimeSum =
-        data.picMin + data.sicMin + data.dualMin + data.instructorMin;
+        data.picMin +
+        (data.picUsMin ?? 0) +
+        (data.spicMin ?? 0) +
+        data.sicMin +
+        data.dualMin +
+        data.instructorMin;
 
     if (roleTimeSum > data.blockTimeMin) {
         const excess = roleTimeSum - data.blockTimeMin;
         errors.push({
             field: 'pic_min',
             message:
-                `合规检查失败：PIC + SIC + 带飞 + 教员 = ${roleTimeSum} 分钟，` +
-                `超出总时长 ${data.blockTimeMin} 分钟（多 ${excess} 分钟）。` +
-                `局方规定各细分时间之和不得超过总时长。`,
+                `合规检查失败：PIC + PIC U/S + SPIC + SIC + 带飞 + 教员 = ${roleTimeSum} 分钟，` +
+                `超出飞行时间 ${data.blockTimeMin} 分钟（多 ${excess} 分钟）。` +
+                `依据 CCAR-61 合规要求，各项经历时间之和不得超过飞行时间 (Block Time)。`,
             code: 'ROLE_TIME_EXCEEDS_BLOCK',
         });
     }
@@ -203,7 +212,7 @@ export function validateFlightRecord(data: FlightRecordInput): ValidationResult 
         errors.push({
             field: 'night_flight_min',
             message:
-                `夜航时间 (${data.nightFlightMin} 分钟) 不能超过总时长 (${data.blockTimeMin} 分钟)。`,
+                `夜航时间 (${data.nightFlightMin} 分钟) 不能超过飞行时间 (${data.blockTimeMin} 分钟)。`,
             code: 'SPECIAL_TIME_EXCEEDS_BLOCK',
         });
     }
@@ -212,7 +221,7 @@ export function validateFlightRecord(data: FlightRecordInput): ValidationResult 
         errors.push({
             field: 'instrument_min',
             message:
-                `仪表时间 (${data.instrumentMin} 分钟) 不能超过总时长 (${data.blockTimeMin} 分钟)。`,
+                `仪表时间 (${data.instrumentMin} 分钟) 不能超过飞行时间 (${data.blockTimeMin} 分钟)。`,
             code: 'SPECIAL_TIME_EXCEEDS_BLOCK',
         });
     }
@@ -297,8 +306,8 @@ export function validate90DayExperience(
             dayLdg, nightLdg, totalLdg,
             alertLevel: 'red',
             alertMessage:
-                '资质告警：过去 90 天内起飞或落地次数为零，近期经历不满足 CCAR 运行要求，' +
-                '请及时安排本场或模拟机训练。',
+                '近 90 天记录中起飞或着陆次数为零，可能不满足近期飞行经历要求。' +
+                '请依据所在公司运行手册或飞行标准部门要求核实，并安排相应训练。',
         };
     }
 
@@ -306,14 +315,14 @@ export function validate90DayExperience(
     if (totalTo <= 3 || totalLdg <= 3) {
         const lowItems: string[] = [];
         if (totalTo <= 3) lowItems.push(`起飞 ${totalTo} 次`);
-        if (totalLdg <= 3) lowItems.push(`落地 ${totalLdg} 次`);
+        if (totalLdg <= 3) lowItems.push(`着陆 ${totalLdg} 次`);
         return {
             dayTo, nightTo, totalTo,
             dayLdg, nightLdg, totalLdg,
             alertLevel: 'yellow',
             alertMessage:
-                `资质预警：过去 90 天内${lowItems.join('、')}，未满足 3 次要求，` +
-                '近期经历即将失效，请关注。',
+                `近 90 天${lowItems.join('、')}，低于 CCAR-61.55 规定最低次数，近期飞行经历即将失效。` +
+                '请依据所在公司运行手册或飞行标准部门要求核实。',
         };
     }
 
@@ -322,7 +331,7 @@ export function validate90DayExperience(
         dayTo, nightTo, totalTo,
         dayLdg, nightLdg, totalLdg,
         alertLevel: 'ok',
-        alertMessage: `✅ 近90天起飞 ${totalTo} 次、落地 ${totalLdg} 次，近期经历符合要求。`,
+        alertMessage: `✅ 近 90 天起飞 ${totalTo} 次、着陆 ${totalLdg} 次，近期飞行经历符合要求。`,
     };
 }
 

@@ -57,34 +57,34 @@ export default function App() {
             <DatabaseProvider database={database}>
                 <NavigationContainer>
                     <StatusBar style="light" backgroundColor="#0A0F1E" />
-                <Stack.Navigator
-                    initialRouteName="Dashboard"
-                    screenOptions={SCREEN_OPTIONS}
-                >
-                    <Stack.Screen
-                        name="Dashboard"
-                        component={DashboardScreen}
-                        options={{ title: '✈ 飞行记录本', headerShown: true }}
-                    />
-                    <Stack.Screen
-                        name="Timeline"
-                        component={TimelineScreen}
-                        options={{ title: '历史记录' }}
-                    />
-                    <Stack.Screen
-                        name="EntryForm"
-                        component={EntryFormScreen}
-                        options={({ route }) => ({
-                            title: route.params?.recordId ? '编辑记录' : '新建记录',
-                            presentation: 'modal',
-                        })}
-                    />
-                    <Stack.Screen
-                        name="Settings"
-                        component={SettingsScreen}
-                        options={{ title: '设置 & 导出' }}
-                    />
-                </Stack.Navigator>
+                    <Stack.Navigator
+                        initialRouteName="Dashboard"
+                        screenOptions={SCREEN_OPTIONS}
+                    >
+                        <Stack.Screen
+                            name="Dashboard"
+                            component={DashboardScreen}
+                            options={{ title: '✈ Pilot Logbook', headerShown: true }}
+                        />
+                        <Stack.Screen
+                            name="Timeline"
+                            component={TimelineScreen}
+                            options={{ title: '历史记录' }}
+                        />
+                        <Stack.Screen
+                            name="EntryForm"
+                            component={EntryFormScreen}
+                            options={({ route }) => ({
+                                title: route.params?.recordId ? '编辑记录' : '新建记录',
+                                presentation: 'modal',
+                            })}
+                        />
+                        <Stack.Screen
+                            name="Settings"
+                            component={SettingsScreen}
+                            options={{ title: '设置与导出' }}
+                        />
+                    </Stack.Navigator>
                 </NavigationContainer>
             </DatabaseProvider>
         </AppErrorBoundary>

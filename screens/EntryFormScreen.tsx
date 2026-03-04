@@ -41,6 +41,8 @@ function applyPayloadToRecord(record: LogbookRecord, data: FormSavePayload) {
     // Durations
     record.blockTimeMin = data.blockTimeMin;
     record.picMin = data.picMin;
+    record.picUsMin = data.picUsMin ?? 0;
+    record.spicMin = data.spicMin ?? 0;
     record.sicMin = data.sicMin;
     record.dualMin = data.dualMin;
     record.instructorMin = data.instructorMin;

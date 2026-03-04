@@ -15,6 +15,10 @@
  *  - version 2: Added `uuid` (cloud-sync pre-reservation).
  *  - version 3: Added `day_to` / `night_to` (PRD V1.1 — CCAR-61 independent T/O counts).
  *               Extended PilotRole to include 'PICUS'.
+ *  - version 4: Added `pic_us_min` (PIC U/S) and `spic_min` (SPIC) duration fields.
+ *               Refactored PilotRole → PF|PM only (manipulation role).
+ *               Introduced CapacityRole enum for seat-level role classification.
+ *               PICUS is now expressed via CapacityRole 'PIC_US', not pilotRole.
  */
 
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
@@ -28,11 +32,20 @@ export type DutyType = 'FLIGHT' | 'SIMULATOR';
 export type AppSyncStatus = 'LOCAL_ONLY' | 'PENDING_UPLOAD' | 'SYNCED';
 
 /**
- * Pilot role during the flight.
- * PICUS = Pilot-In-Command Under Supervision (机长受监视飞行) — must be noted in remarks
- * for ATPL applications per CCAR-61.
+ * Manipulation role during the flight (who is on the controls).
+ * PF = Pilot Flying (操纵飞机), PM = Pilot Monitoring (监控/通讯).
+ * Previously included PICUS — that distinction is now handled by CapacityRole.
  */
-export type PilotRole = 'PF' | 'PM' | 'PICUS';
+export type PilotRole = 'PF' | 'PM';
+
+/**
+ * Seat / capacity role — determines which experience-time bucket the block time flows into.
+ * PIC      = Pilot-In-Command (机长)
+ * PIC_US   = PIC Under Supervision (监视下履行机长职责, 前称 PICUS)
+ * SPIC     = Student Pilot-In-Command (见习机长)
+ * SIC      = Second-In-Command (副驾驶)
+ */
+export type CapacityRole = 'PIC' | 'PIC_US' | 'SPIC' | 'SIC';
 
 // Table name constant — single source of truth to avoid typos.
 export const TABLE_LOGBOOK_RECORDS = 'logbook_records' as const;
@@ -47,7 +60,7 @@ export const TABLE_LOGBOOK_RECORDS = 'logbook_records' as const;
  * reset the database — catastrophic for a pilot logbook.
  */
 export const schema = appSchema({
-    version: 3,
+    version: 4,
     tables: [
         tableSchema({
             name: TABLE_LOGBOOK_RECORDS,
@@ -105,7 +118,7 @@ export const schema = appSchema({
                 // ── Time Points (UTC ISO-8601 strings) ───────────────────────────────
 
                 /**
-                 * off_time_utc: chock-off / start time (UTC ISO-8601).
+                 * off_time_utc: 撤轮档 / start time (UTC ISO-8601).
                  * In SIM mode this is repurposed as "From" time.
                  * Required for ALL duty types.
                  */
@@ -126,7 +139,7 @@ export const schema = appSchema({
                 { name: 'ldg_time_utc', type: 'string', isOptional: true },
 
                 /**
-                 * on_time_utc: chock-on / end time (UTC ISO-8601).
+                 * on_time_utc: 挡轮档 / end time (UTC ISO-8601).
                  * In SIM mode this is repurposed as "To" time.
                  * Required for ALL duty types.
                  */
@@ -150,6 +163,19 @@ export const schema = appSchema({
                 /** sic_min: Second-In-Command time in INTEGER minutes. Default 0. */
                 { name: 'sic_min', type: 'number' },
 
+                /**
+                 * pic_us_min: PIC Under Supervision time in INTEGER minutes. Default 0.
+                 * Formerly tracked via remarks/PICUS annotation; now a first-class column.
+                 * isOptional: true — safe migration for existing rows (null coalesces to 0).
+                 */
+                { name: 'pic_us_min', type: 'number', isOptional: true },
+
+                /**
+                 * spic_min: Student-PIC (见习机长) time in INTEGER minutes. Default 0.
+                 * isOptional: true — safe migration.
+                 */
+                { name: 'spic_min', type: 'number', isOptional: true },
+
                 /** dual_min: Dual received time in INTEGER minutes. Default 0. */
                 { name: 'dual_min', type: 'number' },
 
@@ -165,8 +191,9 @@ export const schema = appSchema({
                 // ── Role & Approach ───────────────────────────────────────────────────
 
                 /**
-                 * pilot_role: 'PF' (Pilot Flying) or 'PM' (Pilot Monitoring).
-                 * Optional — not required for every record.
+                 * pilot_role: manipulation role — 'PF' (Pilot Flying) or 'PM' (Pilot Monitoring).
+                 * Seat/capacity role is implied by which of pic_min / pic_us_min / spic_min / sic_min
+                 * is non-zero. Optional — not required for every record.
                  */
                 { name: 'pilot_role', type: 'string', isOptional: true },
 

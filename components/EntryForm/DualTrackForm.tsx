@@ -8,7 +8,7 @@
  * Implements PRD §4.1: blocks save when role-time sum > block time.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
     View,
     Text,
@@ -17,6 +17,7 @@ import {
     TouchableOpacity,
     StyleSheet,
     Alert,
+    ActivityIndicator,
 } from 'react-native';
 
 import MaskedTimeInput from '../shared/MaskedTimeInput';
@@ -27,6 +28,8 @@ import { lookupAirportOffset, isDstObservingRegion } from '../../data/airportTim
 import { localTimeToUtcISO, isNightHintTime } from '../../utils/TimeCalculator';
 import { minutesToHHMM } from '../../utils/TimeCalculator';
 import type { LogbookRecord } from '../../model/LogbookRecord';
+import type { CapacityRole } from '../../model/schema';
+import { fetchFlightInfo } from '../../utils/ApiService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,11 +43,16 @@ type FlightFields = {
     toRaw: string;    // raw digit string for TO
     ldgRaw: string;   // raw digit string for LDG
     onRaw: string;    // raw digit string for ON
-    picRaw: string;   // role time in raw digits (minutes)
-    sicRaw: string;
+    // 容量角色（座位角色）— determines which time bucket block time flows into
+    capacityRole: CapacityRole | '';
+    picRaw: string;       // PIC minutes
+    picUsRaw: string;     // PIC U/S (機长受监视) minutes
+    spicRaw: string;      // SPIC (见习機长) minutes
+    sicRaw: string;       // SIC minutes
     dualRaw: string;
     instructorRaw: string;
-    pilotRole: 'PF' | 'PM' | 'PICUS' | '';
+    // 操纵角色（PF 或 PM）— independent from capacity role
+    pilotRole: 'PF' | 'PM' | '';
     approachType: string;
     dayTo: number;
     nightTo: number;
@@ -107,7 +115,9 @@ const TRAINING_TYPE_OPTIONS = [
 const EMPTY_FLIGHT: FlightFields = {
     flightNo: '', depIcao: '', arrIcao: '',
     offRaw: '', toRaw: '', ldgRaw: '', onRaw: '',
-    picRaw: '', sicRaw: '', dualRaw: '', instructorRaw: '',
+    capacityRole: '',
+    picRaw: '', picUsRaw: '', spicRaw: '', sicRaw: '',
+    dualRaw: '', instructorRaw: '',
     pilotRole: '', approachType: '',
     dayTo: 0, nightTo: 0,
     dayLdg: 0, nightLdg: 0,
@@ -135,8 +145,12 @@ export interface FormSavePayload extends FlightRecordInput {
     toUtcISO: string | null;
     ldgUtcISO: string | null;
     approachType: string | null;
-    /** PF, PM, or PICUS (机长受监视飞行) */
-    pilotRole: 'PF' | 'PM' | 'PICUS' | null;
+    /** PF or PM — manipulation role (who is on the controls) */
+    pilotRole: 'PF' | 'PM' | null;
+    /** Seat/capacity role — determines which experience-time bucket was filled */
+    capacityRole: CapacityRole | null;
+    picUsMin: number;
+    spicMin: number;
     dayTo: number;
     nightTo: number;
     dayLdg: number;
@@ -182,11 +196,20 @@ export const DualTrackForm: React.FC<Props> = ({
             depIcao: existingRecord.depIcao ?? '',
             arrIcao: existingRecord.arrIcao ?? '',
             offRaw: '', toRaw: '', ldgRaw: '', onRaw: '',
+            // Infer capacity role from which time bucket is filled
+            capacityRole: existingRecord.safePicUsMin > 0 ? 'PIC_US'
+                : existingRecord.safeSpicMin > 0 ? 'SPIC'
+                    : existingRecord.sicMin > 0 ? 'SIC'
+                        : existingRecord.picMin > 0 ? 'PIC'
+                            : '',
             picRaw: existingRecord.picMin > 0 ? String(existingRecord.picMin) : '',
+            picUsRaw: existingRecord.safePicUsMin > 0 ? String(existingRecord.safePicUsMin) : '',
+            spicRaw: existingRecord.safeSpicMin > 0 ? String(existingRecord.safeSpicMin) : '',
             sicRaw: existingRecord.sicMin > 0 ? String(existingRecord.sicMin) : '',
             dualRaw: existingRecord.dualMin > 0 ? String(existingRecord.dualMin) : '',
             instructorRaw: existingRecord.instructorMin > 0 ? String(existingRecord.instructorMin) : '',
-            pilotRole: existingRecord.pilotRole ?? '',
+            pilotRole: (existingRecord.pilotRole === 'PF' || existingRecord.pilotRole === 'PM')
+                ? existingRecord.pilotRole : '',
             approachType: existingRecord.approachType ?? '',
             dayTo: existingRecord.safeDayTo,
             nightTo: existingRecord.safeNightTo,
@@ -333,6 +356,8 @@ export const DualTrackForm: React.FC<Props> = ({
             dutyType,
             blockTimeMin: blockTimeMin ?? 0,
             picMin: parseMins(flight.picRaw),
+            picUsMin: parseMins(flight.picUsRaw),
+            spicMin: parseMins(flight.spicRaw),
             sicMin: parseMins(flight.sicRaw),
             dualMin: parseMins(flight.dualRaw),
             instructorMin: parseMins(flight.instructorRaw),
@@ -354,7 +379,7 @@ export const DualTrackForm: React.FC<Props> = ({
             setErrors(errMap);
             Alert.alert(
                 '保存失败',
-                `共发现 ${result.errors.length} 个问题，请检查标红字段。`,
+                `存在 ${result.errors.length} 项不符合要求的内容，请检查标注字段后重新保存。`,
                 [{ text: '确认', style: 'default' }]
             );
             return;
@@ -377,7 +402,10 @@ export const DualTrackForm: React.FC<Props> = ({
             toUtcISO: dutyType === 'FLIGHT' ? toUtcISO : null,
             ldgUtcISO: dutyType === 'FLIGHT' ? ldgUtcISO : null,
             approachType: dutyType === 'FLIGHT' ? (flight.approachType || null) : null,
-            pilotRole: dutyType === 'FLIGHT' ? (flight.pilotRole as 'PF' | 'PM' | 'PICUS' | null || null) : null,
+            pilotRole: dutyType === 'FLIGHT' ? (flight.pilotRole as 'PF' | 'PM' | null || null) : null,
+            capacityRole: dutyType === 'FLIGHT' ? (flight.capacityRole as CapacityRole || null) : null,
+            picUsMin: dutyType === 'FLIGHT' ? parseMins(flight.picUsRaw) : 0,
+            spicMin: dutyType === 'FLIGHT' ? parseMins(flight.spicRaw) : 0,
             dayTo: dutyType === 'FLIGHT' ? flight.dayTo : 0,
             nightTo: dutyType === 'FLIGHT' ? flight.nightTo : 0,
             dayLdg: dutyType === 'FLIGHT' ? flight.dayLdg : 0,
@@ -405,15 +433,82 @@ export const DualTrackForm: React.FC<Props> = ({
     const fieldError = (key: string) =>
         submitted && errors[key] ? errors[key] : undefined;
 
-    // ── PICUS quick-append (idempotent per QA mandate) ────────────────────────
-    const handleAddPicus = () => {
-        // QA: if 'PICUS' already present in remarks, do not append again
-        if (shared.remarks.includes('PICUS')) return;
-        updateShared({ remarks: shared.remarks ? shared.remarks + ' PICUS' : 'PICUS' });
+    // ── Capacity Role Selection with Block Time Auto-Fill ──────────────────────
+    /**
+     * When pilot selects a capacity role, automatically fills the corresponding
+     * time field with the current block time (one-tap entry per PRD requirement).
+     */
+    const handleCapacityRoleSelect = (role: CapacityRole | '') => {
+        if (!role || blockTimeMin === null) {
+            updateFlight({ capacityRole: role });
+            return;
+        }
+        const bt = String(blockTimeMin);
+        switch (role) {
+            case 'PIC': updateFlight({ capacityRole: role, picRaw: bt, picUsRaw: '', spicRaw: '', sicRaw: '' }); break;
+            case 'PIC_US': updateFlight({ capacityRole: role, picUsRaw: bt, picRaw: '', spicRaw: '', sicRaw: '' }); break;
+            case 'SPIC': updateFlight({ capacityRole: role, spicRaw: bt, picRaw: '', picUsRaw: '', sicRaw: '' }); break;
+            case 'SIC': updateFlight({ capacityRole: role, sicRaw: bt, picRaw: '', picUsRaw: '', spicRaw: '' }); break;
+        }
     };
 
     // ── Night-hint: show 🌙 when LDG or ON is after 19:00 ────────────────────
     const showNightHint = isNightHintTime(flight.ldgRaw) || isNightHintTime(flight.onRaw);
+
+    // ── Flight number auto-fill (Phase 6) ────────────────────────────────────
+    const [fetchingFlight, setFetchingFlight] = useState(false);
+    const [fetchSuccess, setFetchSuccess] = useState(false);
+    const abortRef = useRef<AbortController | null>(null);
+
+    // Cleanup: abort any in-flight fetch when component unmounts
+    useEffect(() => {
+        return () => {
+            abortRef.current?.abort();
+        };
+    }, []);
+
+    const handleFlightNoBlur = useCallback(async () => {
+        const fno = flight.flightNo;
+        const date = shared.actlDate;
+
+        // Gate: need FLIGHT mode, ≥4 chars, and a date
+        if (dutyType !== 'FLIGHT' || fno.length < 4 || !date) return;
+
+        // Abort any previous in-flight request
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+
+        setFetchingFlight(true);
+        setFetchSuccess(false);
+
+        const info = await fetchFlightInfo(fno, date, controller.signal);
+
+        // Guard: component may have unmounted or request was superseded
+        if (controller.signal.aborted) return;
+
+        setFetchingFlight(false);
+
+        if (!info) return; // Silent degradation — no error shown
+
+        // Only fill EMPTY fields — never overwrite user input (SME red line)
+        const updates: Partial<FlightFields> = {};
+        if (!flight.depIcao && info.depIcao) updates.depIcao = info.depIcao;
+        if (!flight.arrIcao && info.arrIcao) updates.arrIcao = info.arrIcao;
+
+        const sharedUpdates: Partial<SharedFields> = {};
+        if (!shared.acftType && info.acftType) sharedUpdates.acftType = info.acftType;
+        if (!shared.regNo && info.regNo) sharedUpdates.regNo = info.regNo;
+
+        if (Object.keys(updates).length > 0) updateFlight(updates);
+        if (Object.keys(sharedUpdates).length > 0) updateShared(sharedUpdates);
+
+        // Show success icon briefly
+        if (Object.keys(updates).length > 0 || Object.keys(sharedUpdates).length > 0) {
+            setFetchSuccess(true);
+            setTimeout(() => setFetchSuccess(false), 2000);
+        }
+    }, [flight.flightNo, flight.depIcao, flight.arrIcao, shared.actlDate, shared.acftType, shared.regNo, dutyType, updateFlight, updateShared]);
 
     // ── Remarks section (shared across both duty tracks) ─────────────────────
     const renderRemarksSection = () => (
@@ -423,22 +518,12 @@ export const DualTrackForm: React.FC<Props> = ({
                 style={[styles.textInput, { height: 72, textAlignVertical: 'top' }]}
                 value={shared.remarks}
                 onChangeText={v => updateShared({ remarks: v })}
-                placeholder="飞行备注（可选）"
+                placeholder="备注（可选）"
                 placeholderTextColor={COLORS.placeholder}
                 multiline
                 numberOfLines={3}
                 testID="input-remarks"
             />
-            {/* PRD §3.2: one-tap PICUS append — idempotent */}
-            {dutyType === 'FLIGHT' && (
-                <TouchableOpacity
-                    style={styles.picusBtn}
-                    onPress={handleAddPicus}
-                    testID="btn-add-picus"
-                >
-                    <Text style={styles.picusBtnText}>＋ PICUS</Text>
-                </TouchableOpacity>
-            )}
         </View>
     );
 
@@ -447,20 +532,26 @@ export const DualTrackForm: React.FC<Props> = ({
     return (
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
 
-            {/* ── Duty Type Toggle ─────────────────────────────────────────── */}
-            <View style={styles.toggleRow}>
-                {(['FLIGHT', 'SIMULATOR'] as DutyType[]).map(dt => (
-                    <TouchableOpacity
-                        key={dt}
-                        style={[styles.toggleBtn, dutyType === dt && styles.toggleBtnActive]}
-                        onPress={() => handleDutyTypeChange(dt)}
-                        testID={`duty-toggle-${dt.toLowerCase()}`}
-                    >
-                        <Text style={[styles.toggleText, dutyType === dt && styles.toggleTextActive]}>
-                            {dt === 'FLIGHT' ? '✈ FLIGHT' : '🖥 SIMULATOR'}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
+            {/* ── Header: title + SIMULATOR secondary entry ─────────────────── */}
+            <View style={styles.formHeader}>
+                <Text style={styles.formHeaderTitle}>
+                    {dutyType === 'FLIGHT' ? '✈ 经历时间 Experience' : '🖥 模拟机 Simulator'}
+                </Text>
+                <TouchableOpacity
+                    style={[
+                        styles.simToggleBtn,
+                        dutyType === 'SIMULATOR' && styles.simToggleBtnActive,
+                    ]}
+                    onPress={() => handleDutyTypeChange(dutyType === 'SIMULATOR' ? 'FLIGHT' : 'SIMULATOR')}
+                    testID="duty-toggle-simulator"
+                >
+                    <Text style={[
+                        styles.simToggleText,
+                        dutyType === 'SIMULATOR' && styles.simToggleTextActive,
+                    ]}>
+                        {dutyType === 'SIMULATOR' ? '✈ 切回飞行' : '🖥 模拟机'}
+                    </Text>
+                </TouchableOpacity>
             </View>
 
             {/* ── Shared Fields ────────────────────────────────────────────── */}
@@ -508,7 +599,7 @@ export const DualTrackForm: React.FC<Props> = ({
                     </View>
                     <View style={styles.gap} />
                     <View style={styles.flexField}>
-                        <Text style={styles.inputLabel}>注册号 Reg No.</Text>
+                        <Text style={styles.inputLabel}>登记号 Reg No.</Text>
                         <TextInput
                             style={styles.textInput}
                             value={shared.regNo}
@@ -530,7 +621,7 @@ export const DualTrackForm: React.FC<Props> = ({
                         <Text style={styles.sectionTitle}>航段 Route</Text>
                         <View style={styles.row}>
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>起飞机场 DEP</Text>
+                                <Text style={styles.inputLabel}>出发站 DEP</Text>
                                 <TextInput
                                     style={styles.textInput}
                                     value={flight.depIcao}
@@ -549,7 +640,7 @@ export const DualTrackForm: React.FC<Props> = ({
                             </View>
                             <Text style={styles.arrow}>→</Text>
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>降落机场 ARR</Text>
+                                <Text style={styles.inputLabel}>到达站 ARR</Text>
                                 <TextInput
                                     style={styles.textInput}
                                     value={flight.arrIcao}
@@ -568,15 +659,28 @@ export const DualTrackForm: React.FC<Props> = ({
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
                                 <Text style={styles.inputLabel}>航班号 Flt No.</Text>
-                                <TextInput
-                                    style={styles.textInput}
-                                    value={flight.flightNo}
-                                    onChangeText={v => updateFlight({ flightNo: v.toUpperCase() })}
-                                    placeholder="CA1501"
-                                    placeholderTextColor={COLORS.placeholder}
-                                    autoCapitalize="characters"
-                                    testID="input-flight-no"
-                                />
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <TextInput
+                                        style={[styles.textInput, { flex: 1 }]}
+                                        value={flight.flightNo}
+                                        onChangeText={v => updateFlight({ flightNo: v.toUpperCase() })}
+                                        onBlur={handleFlightNoBlur}
+                                        placeholder="CA1501"
+                                        placeholderTextColor={COLORS.placeholder}
+                                        autoCapitalize="characters"
+                                        testID="input-flight-no"
+                                    />
+                                    {fetchingFlight && (
+                                        <ActivityIndicator
+                                            size="small"
+                                            color={COLORS.placeholder}
+                                            style={{ marginLeft: 6 }}
+                                        />
+                                    )}
+                                    {fetchSuccess && (
+                                        <Text style={{ marginLeft: 6, fontSize: 16 }}>✨</Text>
+                                    )}
+                                </View>
                             </View>
                         </View>
 
@@ -641,9 +745,9 @@ export const DualTrackForm: React.FC<Props> = ({
 
                     {/* Four-Point Time Axis */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>时间轴 Time Axis (LT)</Text>
+                        <Text style={styles.sectionTitle}>时刻（当地时间 LT）</Text>
                         <Text style={styles.sectionHint}>
-                            填写 TO + LDG 后，OFF/ON 将自动推算 (±10/5分钟)
+                            填写起飞 (T/O) / 着陆 (LDG) 时刻后，滑出 (OFF) / 滑入 (ON) 时刻将自动推算（±10/5 分钟）
                         </Text>
 
                         <View style={styles.timeAxisRow}>
@@ -655,7 +759,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                 hasError={!!fieldError('off_time_utc')}
                             />
                             <MaskedTimeInput
-                                label="TO"
+                                label="T/O"
                                 value={flight.toRaw}
                                 onChange={v => updateFlight({ toRaw: v })}
                                 onBlur={handleTimeAxisBlur}
@@ -680,7 +784,7 @@ export const DualTrackForm: React.FC<Props> = ({
                         {/* Block Time (auto-calculated, read-only) */}
                         {blockTimeMin !== null && (
                             <View style={styles.blockTimeRow}>
-                                <Text style={styles.blockTimeLabel}>总时长 Block:</Text>
+                                <Text style={styles.blockTimeLabel}>飞行时间（Block Time）：</Text>
                                 <Text style={styles.blockTimeValue}>
                                     {minutesToHHMM(blockTimeMin)}
                                 </Text>
@@ -695,60 +799,136 @@ export const DualTrackForm: React.FC<Props> = ({
 
                     {/* Role Times */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>经历时间 Role Times</Text>
+                        <Text style={styles.sectionTitle}>经历时间 Experience</Text>
                         <Text style={styles.sectionHint}>
-                            PIC + SIC + 带飞 + 教员 ≤ 总时长（局方合规红线）
+                            经历时间各项之和不得超过飞行时间（Block Time）
                         </Text>
 
+                        {/* ── My Role: capacity role selector + PF/PM toggle ── */}
+                        <View style={styles.myRoleCard}>
+                            <Text style={styles.myRoleTitle}>我的角色 My Role</Text>
+                            <Text style={styles.myRoleHint}>
+                                选择角色后，飞行时间（Block Time）将自动填入对应字段（可手动修改）
+                            </Text>
+
+                            {/* 4-way capacity role selector */}
+                            <View style={styles.capacityRoleRow}>
+                                {([
+                                    { role: 'PIC', label: 'PIC', sub: '机长' },
+                                    { role: 'PIC_US', label: 'PIC U/S', sub: '监视下履行机长职责' },
+                                    { role: 'SPIC', label: 'SPIC', sub: '见习机长' },
+                                    { role: 'SIC', label: 'SIC', sub: '副驾驶' },
+                                ] as { role: CapacityRole; label: string; sub: string }[]).map(({ role, label, sub }) => (
+                                    <TouchableOpacity
+                                        key={role}
+                                        style={[
+                                            styles.capacityRoleBtn,
+                                            flight.capacityRole === role && styles.capacityRoleBtnActive,
+                                        ]}
+                                        onPress={() => handleCapacityRoleSelect(role)}
+                                        testID={`capacity-role-${role.toLowerCase()}`}
+                                    >
+                                        <Text style={[
+                                            styles.capacityRoleBtnLabel,
+                                            flight.capacityRole === role && styles.capacityRoleBtnLabelActive,
+                                        ]}>
+                                            {label}
+                                        </Text>
+                                        <Text style={[
+                                            styles.capacityRoleBtnSub,
+                                            flight.capacityRole === role && styles.capacityRoleBtnSubActive,
+                                        ]}>
+                                            {sub}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+
+                            {/* PF / PM toggle — manipulation role, independent */}
+                            <View style={styles.pfPmRow}>
+                                <Text style={styles.pfPmLabel}>操纵职责（可叠选）</Text>
+                                <View style={styles.pfPmBtns}>
+                                    {(['PF', 'PM'] as const).map(r => (
+                                        <TouchableOpacity
+                                            key={r}
+                                            style={[
+                                                styles.pfPmBtn,
+                                                flight.pilotRole === r && styles.pfPmBtnActive,
+                                            ]}
+                                            onPress={() => updateFlight({
+                                                pilotRole: flight.pilotRole === r ? '' : r,
+                                            })}
+                                            testID={`pilot-role-${r.toLowerCase()}`}
+                                        >
+                                            <Text style={[
+                                                styles.pfPmBtnText,
+                                                flight.pilotRole === r && styles.pfPmBtnTextActive,
+                                            ]}>
+                                                {r === 'PF' ? '操纵驾驶员（PF）' : '监控驾驶员（PM）'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* ── Time buckets (all 6 fields visible, matching role highlighted) ── */}
                         <View style={styles.row}>
-                            <View style={styles.roleTimeField}>
-                                <Text style={styles.inputLabel}>机长 PIC (分)</Text>
-                                <TextInput
-                                    style={[styles.textInput, fieldError('pic_min') && styles.inputError]}
-                                    value={flight.picRaw}
-                                    onChangeText={v => updateFlight({ picRaw: v.replace(/\D/g, '') })}
-                                    keyboardType="number-pad"
-                                    placeholder="0"
-                                    placeholderTextColor={COLORS.placeholder}
-                                    testID="input-pic"
-                                />
-                            </View>
-                            <View style={styles.roleTimeField}>
-                                <Text style={styles.inputLabel}>副驾 SIC (分)</Text>
-                                <TextInput
-                                    style={styles.textInput}
-                                    value={flight.sicRaw}
-                                    onChangeText={v => updateFlight({ sicRaw: v.replace(/\D/g, '') })}
-                                    keyboardType="number-pad"
-                                    placeholder="0"
-                                    placeholderTextColor={COLORS.placeholder}
-                                    testID="input-sic"
-                                />
-                            </View>
-                            <View style={styles.roleTimeField}>
-                                <Text style={styles.inputLabel}>带飞 Dual (分)</Text>
-                                <TextInput
-                                    style={styles.textInput}
-                                    value={flight.dualRaw}
-                                    onChangeText={v => updateFlight({ dualRaw: v.replace(/\D/g, '') })}
-                                    keyboardType="number-pad"
-                                    placeholder="0"
-                                    placeholderTextColor={COLORS.placeholder}
-                                    testID="input-dual"
-                                />
-                            </View>
-                            <View style={styles.roleTimeField}>
-                                <Text style={styles.inputLabel}>教员 Instr (分)</Text>
-                                <TextInput
-                                    style={styles.textInput}
-                                    value={flight.instructorRaw}
-                                    onChangeText={v => updateFlight({ instructorRaw: v.replace(/\D/g, '') })}
-                                    keyboardType="number-pad"
-                                    placeholder="0"
-                                    placeholderTextColor={COLORS.placeholder}
-                                    testID="input-instructor"
-                                />
-                            </View>
+                            {([
+                                { key: 'picRaw', role: 'PIC', label: '机长 PIC', testID: 'input-pic', errKey: 'pic_min' },
+                                { key: 'picUsRaw', role: 'PIC_US', label: 'PIC U/S', testID: 'input-pic-us', errKey: undefined },
+                                { key: 'spicRaw', role: 'SPIC', label: '见习机长 SPIC', testID: 'input-spic', errKey: undefined },
+                            ] as { key: keyof FlightFields; role: CapacityRole; label: string; testID: string; errKey?: string }[]).map(({ key, role, label, testID, errKey }) => (
+                                <View key={key} style={styles.roleTimeField}>
+                                    <Text style={[
+                                        styles.inputLabel,
+                                        flight.capacityRole === role && styles.inputLabelHighlight,
+                                    ]}>
+                                        {label} (分)
+                                    </Text>
+                                    <TextInput
+                                        style={[
+                                            styles.textInput,
+                                            errKey && fieldError(errKey) && styles.inputError,
+                                            flight.capacityRole === role && styles.roleTimeHighlight,
+                                        ]}
+                                        value={flight[key] as string}
+                                        onChangeText={v => updateFlight({ [key]: v.replace(/\D/g, '') })}
+                                        keyboardType="number-pad"
+                                        placeholder="0"
+                                        placeholderTextColor={COLORS.placeholder}
+                                        testID={testID}
+                                    />
+                                </View>
+                            ))}
+                        </View>
+                        <View style={styles.row}>
+                            {([
+                                { key: 'sicRaw', role: 'SIC', label: '副驾驶 SIC', testID: 'input-sic', errKey: undefined },
+                                { key: 'dualRaw', role: null, label: '带飞 Dual', testID: 'input-dual', errKey: undefined },
+                                { key: 'instructorRaw', role: null, label: '教员 Instructor', testID: 'input-instructor', errKey: undefined },
+                            ] as { key: keyof FlightFields; role: CapacityRole | null; label: string; testID: string; errKey?: string }[]).map(({ key, role, label, testID }) => (
+                                <View key={key} style={styles.roleTimeField}>
+                                    <Text style={[
+                                        styles.inputLabel,
+                                        role && flight.capacityRole === role && styles.inputLabelHighlight,
+                                    ]}>
+                                        {label} (分)
+                                    </Text>
+                                    <TextInput
+                                        style={[
+                                            styles.textInput,
+                                            role && flight.capacityRole === role && styles.roleTimeHighlight,
+                                        ]}
+                                        value={flight[key] as string}
+                                        onChangeText={v => updateFlight({ [key]: v.replace(/\D/g, '') })}
+                                        keyboardType="number-pad"
+                                        placeholder="0"
+                                        placeholderTextColor={COLORS.placeholder}
+                                        testID={testID}
+                                    />
+                                </View>
+                            ))}
                         </View>
 
                         {/* Compliance error banner */}
@@ -761,22 +941,11 @@ export const DualTrackForm: React.FC<Props> = ({
                         )}
                     </View>
 
-                    {/* Role & Approach */}
+                    {/* Approach Type (moved out of old "Role & Approach" section) */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>飞行角色与进近类型</Text>
+                        <Text style={styles.sectionTitle}>进近方式 Approach Type</Text>
                         <OptionPicker
-                            label="飞行角色 Pilot Role"
-                            value={flight.pilotRole}
-                            onChange={v => updateFlight({ pilotRole: v as 'PF' | 'PM' | 'PICUS' | '' })}
-                            options={[
-                                { label: 'PF (操作)', value: 'PF' },
-                                { label: 'PM (监控)', value: 'PM' },
-                                { label: 'PICUS (机长受监视)', value: 'PICUS' },
-                            ]}
-                            testID="picker-pilot-role"
-                        />
-                        <OptionPicker
-                            label="进近类型 Approach Type"
+                            label=""
                             value={flight.approachType}
                             onChange={v => updateFlight({ approachType: v })}
                             options={APPROACH_TYPE_OPTIONS}
@@ -786,8 +955,8 @@ export const DualTrackForm: React.FC<Props> = ({
 
                     {/* Takeoffs & Landings — 2×2 grid per SME recommendation */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>起降次数 T/O & Landings</Text>
-                        <Text style={styles.sectionHint}>起飞 / 落地各按昼夜分别记录（局方标准格式）</Text>
+                        <Text style={styles.sectionTitle}>起飞/着陆次数</Text>
+                        <Text style={styles.sectionHint}>起飞/着陆各按昼夜分别记录（CCAR-61 标准格式）</Text>
                         <View style={styles.row}>
                             <LandingCounter
                                 label="昼间起飞 Day T/O"
@@ -805,14 +974,14 @@ export const DualTrackForm: React.FC<Props> = ({
                         </View>
                         <View style={[styles.row, { marginTop: 8 }]}>
                             <LandingCounter
-                                label="昼间落地 Day LDG"
+                                label="昼间着陆（Day LDG）"
                                 value={flight.dayLdg}
                                 onChange={v => updateFlight({ dayLdg: v })}
                                 testIDBase="day-ldg"
                             />
                             <View style={styles.gap} />
                             <LandingCounter
-                                label="夜间落地 Night LDG"
+                                label="夜间着陆（Night LDG）"
                                 value={flight.nightLdg}
                                 onChange={v => updateFlight({ nightLdg: v })}
                                 testIDBase="night-ldg"
@@ -823,7 +992,7 @@ export const DualTrackForm: React.FC<Props> = ({
                     {/* Special Times */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>特殊时间 Special Times</Text>
-                        <Text style={styles.sectionHint}>夜航和仪表时间与 Block Time 可重叠，不入局方合规公式计算</Text>
+                        <Text style={styles.sectionHint}>夜航和仪表时间与飞行时间 (Block Time) 可重叠，不入合规公式计算</Text>
                         <View style={styles.row}>
                             <View style={styles.roleTimeField}>
                                 {/* PRD §3.2: 🌙 label icon + amber border when LDG/ON ≥ 19:00 LT */}
@@ -870,7 +1039,7 @@ export const DualTrackForm: React.FC<Props> = ({
 
                         <View style={styles.row}>
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>SIM 编号</Text>
+                                <Text style={styles.inputLabel}>模拟机编号 SIM No.</Text>
                                 <TextInput
                                     style={styles.textInput}
                                     value={sim.simNo}
@@ -882,7 +1051,7 @@ export const DualTrackForm: React.FC<Props> = ({
                             </View>
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>SIM 等级 CAT</Text>
+                                <Text style={styles.inputLabel}>FSTD 鉴定等级</Text>
                                 <OptionPicker
                                     label=""
                                     value={sim.simCat}
@@ -907,7 +1076,7 @@ export const DualTrackForm: React.FC<Props> = ({
                             </View>
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>训练类型</Text>
+                                <Text style={styles.inputLabel}>训练种类 Training Type</Text>
                                 <OptionPicker
                                     label=""
                                     value={sim.trainingType}
@@ -922,7 +1091,7 @@ export const DualTrackForm: React.FC<Props> = ({
                         <Text style={[styles.sectionTitle, { marginTop: 16 }]}>训练时段</Text>
                         <View style={styles.timeAxisRow}>
                             <MaskedTimeInput
-                                label="From"
+                                label="起始"
                                 value={sim.fromRaw}
                                 onChange={v => updateSim({ fromRaw: v })}
                                 onBlur={handleSimTimeBlur}
@@ -932,7 +1101,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                 <Text style={styles.arrow}>→</Text>
                             </View>
                             <MaskedTimeInput
-                                label="To"
+                                label="结束"
                                 value={sim.toRaw}
                                 onChange={v => updateSim({ toRaw: v })}
                                 onBlur={handleSimTimeBlur}
@@ -942,7 +1111,7 @@ export const DualTrackForm: React.FC<Props> = ({
 
                         {blockTimeMin !== null && (
                             <View style={styles.blockTimeRow}>
-                                <Text style={styles.blockTimeLabel}>Duty Time:</Text>
+                                <Text style={styles.blockTimeLabel}>训练时长：</Text>
                                 <Text style={styles.blockTimeValue}>
                                     {minutesToHHMM(blockTimeMin)}
                                 </Text>
@@ -1028,7 +1197,155 @@ const styles = StyleSheet.create({
     scroll: { flex: 1, backgroundColor: COLORS.background },
     content: { padding: 16, paddingBottom: 40 },
 
-    // Toggle
+    // ── Form Header (replaces big segmented control) ──────────────────────────
+    formHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 16,
+    },
+    formHeaderTitle: {
+        color: COLORS.text,
+        fontSize: 18,
+        fontWeight: '700',
+        letterSpacing: 0.5,
+    },
+    // Small secondary SIMULATOR entry button (top-right corner)
+    simToggleBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        borderWidth: 1.5,
+        borderColor: COLORS.border,
+        backgroundColor: COLORS.surface,
+    },
+    simToggleBtnActive: {
+        borderColor: COLORS.primary,
+        backgroundColor: '#1E3A5F',
+    },
+    simToggleText: {
+        color: COLORS.textSecondary,
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    simToggleTextActive: {
+        color: COLORS.accent,
+    },
+
+    // ── My Role Card ─────────────────────────────────────────────────────────
+    myRoleCard: {
+        backgroundColor: '#0F172A',
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 12,
+        borderWidth: 1.5,
+        borderColor: '#2563EB',
+    },
+    myRoleTitle: {
+        color: '#93C5FD',
+        fontSize: 13,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+        marginBottom: 4,
+    },
+    myRoleHint: {
+        color: COLORS.textSecondary,
+        fontSize: 11,
+        fontStyle: 'italic',
+        marginBottom: 12,
+        lineHeight: 16,
+    },
+
+    // 4-way capacity role pills
+    capacityRoleRow: {
+        flexDirection: 'row',
+        gap: 6,
+        marginBottom: 12,
+    },
+    capacityRoleBtn: {
+        flex: 1,
+        paddingVertical: 10,
+        alignItems: 'center',
+        borderRadius: 8,
+        borderWidth: 1.5,
+        borderColor: COLORS.border,
+        backgroundColor: COLORS.surface,
+    },
+    capacityRoleBtnActive: {
+        borderColor: '#3B82F6',
+        backgroundColor: '#1E3A5F',
+        shadowColor: '#3B82F6',
+        shadowOpacity: 0.5,
+        shadowRadius: 6,
+        elevation: 4,
+    },
+    capacityRoleBtnLabel: {
+        color: COLORS.textSecondary,
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    capacityRoleBtnLabelActive: {
+        color: '#DBEAFE',
+    },
+    capacityRoleBtnSub: {
+        color: COLORS.placeholder,
+        fontSize: 9,
+        marginTop: 2,
+    },
+    capacityRoleBtnSubActive: {
+        color: '#93C5FD',
+    },
+
+    // PF / PM toggle row
+    pfPmRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    pfPmLabel: {
+        color: COLORS.textSecondary,
+        fontSize: 11,
+        fontWeight: '500',
+        flex: 1,
+    },
+    pfPmBtns: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    pfPmBtn: {
+        paddingHorizontal: 16,
+        paddingVertical: 7,
+        borderRadius: 20,
+        borderWidth: 1.5,
+        borderColor: COLORS.border,
+        backgroundColor: COLORS.surface,
+    },
+    pfPmBtnActive: {
+        borderColor: '#10B981',
+        backgroundColor: '#064E3B',
+    },
+    pfPmBtnText: {
+        color: COLORS.textSecondary,
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    pfPmBtnTextActive: {
+        color: '#6EE7B7',
+    },
+
+    // Highlighted input when it matches the selected capacity role
+    inputLabelHighlight: {
+        color: '#60A5FA',
+    },
+    roleTimeHighlight: {
+        borderColor: '#3B82F6',
+        shadowColor: '#3B82F6',
+        shadowOpacity: 0.4,
+        shadowRadius: 5,
+        elevation: 3,
+    },
+
+    // Toggle (kept for legacy reference, no longer rendered)
     toggleRow: {
         flexDirection: 'row',
         backgroundColor: COLORS.surface,

@@ -14,6 +14,7 @@ import {
     TABLE_LOGBOOK_RECORDS,
     type DutyType,
     type PilotRole,
+    type CapacityRole,
     type AppSyncStatus,
 } from './schema';
 
@@ -85,6 +86,19 @@ export class LogbookRecord extends Model {
     /** SIC time in INTEGER minutes. Default 0. */
     @field('sic_min') declare sicMin: number;
 
+    /**
+     * PIC Under Supervision (机长受监视飞行) time in INTEGER minutes. Default 0.
+     * Previously tracked via remarks 'PICUS' — now a first-class column (v4+).
+     * null for pre-v4 migrated rows; use `safePicUsMin` in business logic.
+     */
+    @field('pic_us_min') declare picUsMin: number | null;
+
+    /**
+     * Student-PIC (见习机长) time in INTEGER minutes. Default 0.
+     * null for pre-v4 migrated rows; use `safeSpicMin` in business logic.
+     */
+    @field('spic_min') declare spicMin: number | null;
+
     /** Dual-received time in INTEGER minutes. Default 0. */
     @field('dual_min') declare dualMin: number;
 
@@ -100,12 +114,9 @@ export class LogbookRecord extends Model {
     // ── Role & Approach ───────────────────────────────────────────────────────────
 
     /**
-     * Pilot role during the flight.
-     * - 'PF' (Pilot Flying): controlling the aircraft.
-     * - 'PM' (Pilot Monitoring): managing systems and communications.
-     * - 'PICUS' (Pilot-In-Command Under Supervision): 机长受监视飞行.
-     *   This time is recorded as PIC time but MUST be annotated in remarks
-     *   for ATPL applications per CCAR-61.
+     * Manipulation role: 'PF' (Pilot Flying) or 'PM' (Pilot Monitoring).
+     * Seat/capacity role (PIC / PIC_US / SPIC / SIC) is implied by which
+     * of pic_min / pic_us_min / spic_min / sic_min is non-zero.
      */
     @field('pilot_role') declare pilotRole: PilotRole | null;
 
@@ -238,15 +249,36 @@ export class LogbookRecord extends Model {
         return this.nightTo ?? 0;
     }
 
-    // ─── Compliance Methods ────────────────────────────────────────────────────
+    /**
+     * Safe accessor for PIC-Under-Supervision time.
+     * Coalesces null (pre-v4 migrated rows) to 0.
+     */
+    get safePicUsMin(): number {
+        return this.picUsMin ?? 0;
+    }
+
+    /**
+     * Safe accessor for Student-PIC time.
+     * Coalesces null (pre-v4 migrated rows) to 0.
+     */
+    get safeSpicMin(): number {
+        return this.spicMin ?? 0;
+    }
+
+    // ─── Compliance Methods ────────────────────────────────────────────────────────────────────────
 
     /**
      * Validates the PRD §4.1 compliance red-line:
-     *   PIC + SIC + Dual + Instructor <= BlockTime
+     *   PIC + PIC_US + SPIC + SIC + Dual + Instructor ≤ BlockTime
      */
     isRoleTimeValid(): boolean {
         return (
-            this.picMin + this.sicMin + this.dualMin + this.instructorMin <=
+            this.picMin +
+            this.safePicUsMin +
+            this.safeSpicMin +
+            this.sicMin +
+            this.dualMin +
+            this.instructorMin <=
             this.blockTimeMin
         );
     }

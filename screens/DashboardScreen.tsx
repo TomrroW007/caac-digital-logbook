@@ -105,14 +105,14 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
 
                 {/* Header */}
                 <View style={styles.header}>
-                    <Text style={styles.title}>✈ CAAC Digital Logbook</Text>
-                    <Text style={styles.subtitle}>飞行员电子飞行记录本</Text>
+                    <Text style={styles.title}>✈ Pilot Logbook</Text>
+                    <Text style={styles.subtitle}>飞行经历记录本</Text>
                 </View>
 
                 {/* 90-Day Experience Card — PRD §4.2 dual-row layout */}
                 <View style={[styles.alertCard, { borderColor: alertTheme.color, backgroundColor: alertTheme.bg }]}>
                     <Text style={[styles.cardTitle, { color: alertTheme.color }]}>
-                        {experienceReport.alertLevel === 'ok' ? '✅' : experienceReport.alertLevel === 'yellow' ? '⚠️' : '🚫'} 近90天近期经历
+                        {experienceReport.alertLevel === 'ok' ? '✅' : experienceReport.alertLevel === 'yellow' ? '⚠️' : '🚫'} 近 90 天近期飞行经历
                     </Text>
                     <Text style={styles.cardSubtitle}>
                         {experienceReport.alertMessage}
@@ -125,10 +125,10 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                             <Text style={[styles.expTotal, { color: alertTheme.color }]}>
                                 {experienceReport.totalTo}
                             </Text>
-                            <Text style={styles.expUnit}>起飞总数</Text>
+                            <Text style={styles.expUnit}>起飞次数 T/O</Text>
                         </View>
                         <Text style={styles.expSub}>
-                            昼: {experienceReport.dayTo}  夜: {experienceReport.nightTo}
+                            昼间：{experienceReport.dayTo} / 夜间：{experienceReport.nightTo}
                         </Text>
                     </View>
 
@@ -141,10 +141,10 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                             <Text style={[styles.expTotal, { color: alertTheme.color }]}>
                                 {experienceReport.totalLdg}
                             </Text>
-                            <Text style={styles.expUnit}>落地总数</Text>
+                            <Text style={styles.expUnit}>着陆次数 LDG</Text>
                         </View>
                         <Text style={styles.expSub}>
-                            昼: {experienceReport.dayLdg}  夜: {experienceReport.nightLdg}
+                            昼间：{experienceReport.dayLdg} / 夜间：{experienceReport.nightLdg}
                         </Text>
                     </View>
                 </View>
@@ -153,15 +153,15 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                 <View style={styles.cardRow}>
                     <View style={styles.totalCard}>
                         <Text style={styles.totalIcon}>✈</Text>
-                        <Text style={styles.totalLabel}>真实飞行</Text>
+                        <Text style={styles.totalLabel}>飞行时间</Text>
                         <Text style={styles.totalValue}>{minutesToHHMM(totalFlightMin)}</Text>
-                        <Text style={styles.totalUnit}>总时长</Text>
+                        <Text style={styles.totalUnit}>Block 累计</Text>
                     </View>
                     <View style={[styles.totalCard, { borderColor: COLORS.sim }]}>
                         <Text style={styles.totalIcon}>🖥</Text>
                         <Text style={styles.totalLabel}>模拟机</Text>
                         <Text style={styles.totalValue}>{minutesToHHMM(totalSimMin)}</Text>
-                        <Text style={styles.totalUnit}>总时长</Text>
+                        <Text style={styles.totalUnit}>Block 累计</Text>
                     </View>
                 </View>
 
@@ -188,7 +188,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                             onPress={() => navigation.navigate('Settings')}
                             testID="btn-settings"
                         >
-                            <Text style={styles.secondaryActionText}>导出与设置</Text>
+                            <Text style={styles.secondaryActionText}>设置与导出</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

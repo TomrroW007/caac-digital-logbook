@@ -16,6 +16,9 @@
  *   v2  → v3 : Added `day_to` / `night_to` columns (PRD V1.1 — CCAR-61 T/O counts).
  *              Both columns are isOptional:true — SQLite cannot add NOT NULL columns
  *              to existing rows without a DEFAULT; business layer coalesces null → 0.
+ *   v3  → v4 : Added `pic_us_min` (PIC U/S) and `spic_min` (SPIC) duration columns.
+ *              Both isOptional:true for safe migration; business layer coalesces null → 0.
+ *              PilotRole is now PF|PM only; PICUS is expressed via pic_us_min > 0.
  */
 
 import { schemaMigrations, addColumns } from '@nozbe/watermelondb/Schema/migrations';
@@ -62,6 +65,30 @@ export const migrations = schemaMigrations({
                          * Same migration-safety requirement as day_to.
                          */
                         { name: 'night_to', type: 'number', isOptional: true },
+                    ],
+                }),
+            ],
+        },
+
+        // ── v3 → v4 ──────────────────────────────────────────────────────────
+        {
+            toVersion: 4,
+            steps: [
+                addColumns({
+                    table: TABLE_LOGBOOK_RECORDS,
+                    columns: [
+                        /**
+                         * pic_us_min: PIC Under Supervision (机长受监视飞行) time, INTEGER minutes.
+                         * Formerly annotated in remarks as 'PICUS'; now a first-class numeric field.
+                         * isOptional: true — null on pre-v4 rows coalesces to 0 in business layer.
+                         */
+                        { name: 'pic_us_min', type: 'number', isOptional: true },
+
+                        /**
+                         * spic_min: Student-PIC (见习机长) time in INTEGER minutes.
+                         * isOptional: true — null on pre-v4 rows coalesces to 0.
+                         */
+                        { name: 'spic_min', type: 'number', isOptional: true },
                     ],
                 }),
             ],
