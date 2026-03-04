@@ -468,11 +468,16 @@ export const DualTrackForm: React.FC<Props> = ({
     }, []);
 
     const handleFlightNoBlur = useCallback(async () => {
-        const fno = flight.flightNo;
+        // ── Clean flight number in UI (QA: "mu 5428" → "MU5428") ─────────
+        const cleaned = flight.flightNo.replace(/\s+/g, '').toUpperCase();
+        if (cleaned !== flight.flightNo) {
+            updateFlight({ flightNo: cleaned });
+        }
+
         const date = shared.actlDate;
 
         // Gate: need FLIGHT mode, ≥4 chars, and a date
-        if (dutyType !== 'FLIGHT' || fno.length < 4 || !date) return;
+        if (dutyType !== 'FLIGHT' || cleaned.length < 4 || !date) return;
 
         // Abort any previous in-flight request
         abortRef.current?.abort();
@@ -482,7 +487,7 @@ export const DualTrackForm: React.FC<Props> = ({
         setFetchingFlight(true);
         setFetchSuccess(false);
 
-        const info = await fetchFlightInfo(fno, date, controller.signal);
+        const info = await fetchFlightInfo(cleaned, date, controller.signal);
 
         // Guard: component may have unmounted or request was superseded
         if (controller.signal.aborted) return;
