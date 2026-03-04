@@ -1,32 +1,77 @@
-# ✈️ Pilot Logbook (民航飞行员电子飞行记录本)
+# ✈️ CAAC Digital Logbook（民航飞行员电子飞行经历记录本）
 
 > 一款专为民航飞行员打造的离线优先 (Offline-First)、极简智能且严格符合 CAAC/ICAO 标准的个人专属电子飞行经历记录本。
 
-## 🎯 核心特性 (Core Features)
+## 🎯 核心特性
 
-* **📴 离线优先架构 (Offline-First)**：核心数据（SQLite）完全落盘本地。在机舱断网环境下拥有 100% 完整录入功能；网络恢复后静默增量同步至云端。
-* **🧠 智能填报引擎 (Smart Autofill)**：输入“日期+航班号”，通过后端代理与 Redis 缓存层调用开源 API（如 OpenSky），静默带出起降机场、机型、撤/挡轮挡时间，秒级完成记录。
-* **⚖️ 绝对合规 (CAAC/ICAO Compliant)**：
+* **📴 离线优先架构**：核心数据（SQLite / WatermelonDB）完全落盘本地，机舱断网环境下拥有 100% 完整录入与导出功能。
+* **🧠 航班号智能填充**：输入航班号失焦后，通过 Cloudflare Worker 边缘代理 + KV 缓存查询 AirLabs / AviationStack，静默带出出发站、到达站、航空器型别、航空器登记号，秒级完成基础信息录入。
+* **⚖️ CAAC/ICAO 合规**：
     * 底层统一采用 **UTC 时间戳** 存储与计算，彻底解决跨时区算错时间的痛点。
-    * 系统自动计算总飞行时长 (`block_time`)，并严格校验 `PIC + SIC + Dual + Instructor <= 总时长` 的业务红线。
-* **📊 90天近期经历看板**：根据设备当前时区的自然日零点，动态回溯计算过去 90 天内起降次数，护航客运飞行资质。
-* **🖨️ 纯本地 Excel 导出**：不依赖后端，客户端直接生成完美映射 CAAC 纸质本列头的标准 Excel 报表。
+    * 系统自动计算飞行时间 (Block Time)，并严格校验 `PIC + PIC U/S + SPIC + SIC + Dual + Instructor ≤ Block Time` 的合规红线。
+    * 全部术语遵循 CCAR-61 部 (AC-61-FS-2015-17R1) 及 ICAO 附件 1 官方标准。
+* **📊 90 天近期飞行经历 Dashboard**：以北京时间 (UTC+8) 自然日为基准，动态回溯 90 天内起飞/着陆次数，红/黄/绿三级告警护航客运飞行资质。
+* **🖨️ 双格式合规导出**：
+    * **PDF**：强制横屏、局方标准列头、飞行员/教员/审查员签字栏、每页合计。
+    * **Excel**：SheetJS 生成，18 列完整数据，供 PC 端二次分析。
 
-## 🏗️ 系统架构 (Architecture)
+## 🏗️ 系统架构
 
-* **客户端 (Client)**：UI 渲染 + 本地 SQLite + 离线同步引擎 (Sync) + 本地 Excel 生成器。
-* **服务端 (Server)**：JWT 鉴权 + MySQL 云端备份 + API 代理转发层 (Proxy) + Redis 缓存 (防 API 限流)。
-* **数据同步策略**：采用软删除 (`is_deleted`) 配合最后修改时间 (`last_modified_at`) 解决多端覆盖冲突 (Last Write Wins)。
+* **客户端**：Expo (React Native) + WatermelonDB (SQLite/JSI) + TypeScript。
+* **Serverless 代理**：Cloudflare Workers + KV（零成本 Free Tier），AirLabs → AviationStack 瀑布流。
+* **导出引擎**：expo-print (PDF) + SheetJS (Excel)，纯客户端生成，不依赖后端。
 
-## 📝 核心业务规则必读 (Business Rules)
+## 📝 核心业务规则
 
-1.  **一航段一记录**：若 API 查到经停航班，必须让用户选择实际执飞航段，严禁合并记录。
-2.  **API 熔断机制**：外部航班查询接口设定 **3000ms 超时熔断**。若超时，立即释放 UI 线程，降级为手工兜底录入。
-3.  **时间防篡改**：本地记录的修改时间需根据服务器 UTC 偏移量 (Offset) 进行校准，不可绝对信任设备本地时间。
+1. **SME 红线**：API 仅允许填充 DEP/ARR/ACFT/REG，时间轴 OFF/T/O/LDG/ON 严禁 API 自动覆盖。
+2. **3 秒熔断**：外部航班查询设定 3000ms AbortController 超时。超时或无网静默降级为手工录入，不弹任何报错。
+3. **不覆盖原则**：已由飞行员手动填写的字段，API 返回数据不覆盖。
+4. **分钟制存储**：所有时长 INTEGER 存储分钟数，展示时格式化为 HH:MM。
 
-## 🚀 快速开始 (Getting Started)
+## 🚀 快速开始
 
-*(待开发团队补充：环境配置、安装依赖与启动项目的具体 npm/yarn/pod 命令)*
+```bash
+# 安装依赖
+npm install
+
+# 启动开发服务器
+npx expo start
+
+# 运行测试 (6 suites, 214 tests)
+npx jest --verbose
+
+# 部署 Cloudflare Worker（可选）
+cd worker
+npx wrangler kv:namespace create "FLIGHT_CACHE"
+npx wrangler secret put AIRLABS_KEY
+npx wrangler deploy
+```
+
+## 📂 项目结构
+
+```
+├── App.tsx                  # 导航入口
+├── screens/                 # 4 屏页面
+│   ├── DashboardScreen.tsx  # 首页 Dashboard + 90 天告警
+│   ├── TimelineScreen.tsx   # 历史记录时间线
+│   ├── EntryFormScreen.tsx  # 录入页容器
+│   └── SettingsScreen.tsx   # 设置 & PDF/Excel 导出
+├── components/EntryForm/
+│   └── DualTrackForm.tsx    # FLIGHT/SIMULATOR 双轨表单 + 航班号自动填充
+├── utils/
+│   ├── ApiService.ts        # 航班数据 fetch（3s 超时 + 静默降级）
+│   ├── ComplianceValidator.ts # CCAR-61 合规校验引擎
+│   ├── FlightMath.ts        # 四点时间轴推算
+│   ├── TimeCalculator.ts    # LT↔UTC 转换 + 分钟格式化
+│   └── TimeUtils.ts         # 纯数字时间输入格式化
+├── model/
+│   ├── schema.ts            # WatermelonDB schema v4
+│   └── LogbookRecord.ts     # 数据模型
+├── worker/
+│   ├── worker.js            # Cloudflare Worker（API 瀑布流 + KV 缓存）
+│   └── wrangler.toml        # Workers 部署配置
+└── PRD.md                   # 产品需求文档 V1.3
+```
 
 ---
-*Designed & Architected for Pilots.*
+*Designed & Built for Pilots. ✈️*

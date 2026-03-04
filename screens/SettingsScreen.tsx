@@ -44,7 +44,7 @@ const ROWS_PER_PAGE = 18;
 /** Running numeric totals tracked across pages. */
 type PageTotals = {
     blockFlight: number; blockSim: number;
-    pic: number; sic: number; dual: number; instr: number;
+    pic: number; picUs: number; spic: number; sic: number; dual: number; instr: number;
     night: number; instrument: number;
     dayTo: number; nightTo: number;
     dayLdg: number; nightLdg: number;
@@ -52,7 +52,7 @@ type PageTotals = {
 
 const zeroTotals = (): PageTotals => ({
     blockFlight: 0, blockSim: 0,
-    pic: 0, sic: 0, dual: 0, instr: 0,
+    pic: 0, picUs: 0, spic: 0, sic: 0, dual: 0, instr: 0,
     night: 0, instrument: 0,
     dayTo: 0, nightTo: 0, dayLdg: 0, nightLdg: 0,
 });
@@ -61,6 +61,8 @@ const addRecord = (acc: PageTotals, r: LogbookRecord): PageTotals => ({
     blockFlight: acc.blockFlight + (r.isFlight ? r.blockTimeMin : 0),
     blockSim: acc.blockSim + (r.isFlight ? 0 : r.blockTimeMin),
     pic: acc.pic + r.picMin,
+    picUs: acc.picUs + r.safePicUsMin,
+    spic: acc.spic + r.safeSpicMin,
     sic: acc.sic + r.sicMin,
     dual: acc.dual + r.dualMin,
     instr: acc.instr + r.instructorMin,
@@ -80,6 +82,8 @@ const subtotalRow = (label: string, t: PageTotals) => `
       <td colspan="4"></td>
       <td>${t.blockFlight > 0 ? minutesToHHMM(t.blockFlight) : ''}</td>
       <td>${minutesToHHMM(t.pic)}</td>
+      <td>${t.picUs > 0 ? minutesToHHMM(t.picUs) : ''}</td>
+      <td>${t.spic > 0 ? minutesToHHMM(t.spic) : ''}</td>
       <td>${minutesToHHMM(t.sic)}</td>
       <td>${minutesToHHMM(t.dual)}</td>
       <td>${minutesToHHMM(t.instr)}</td>
@@ -97,7 +101,7 @@ const signatureBar = () => `
   <div class="sig">
     <div class="sig-box">飞行员签字 Pilot Signature ______</div>
     <div class="sig-box">教员签字 Instructor Signature ______</div>
-    <div class="sig-box">审核人签字 Check Signature ______</div>
+    <div class="sig-box">审查员签字 Inspector Signature ______</div>
   </div>`;
 
 function generateLogbookHtml(records: LogbookRecord[]): string {
@@ -112,13 +116,13 @@ function generateLogbookHtml(records: LogbookRecord[]): string {
     const thead = `
     <thead>
       <tr>
-        <th>计划日期</th><th>实际日期</th><th>机型</th><th>注册号</th>
+        <th>计划日期</th><th>实际日期</th><th>航空器型别</th><th>航空器登记号</th>
         <th>航段 Route</th>
         <th>OFF UTC</th><th>TO UTC</th><th>LDG UTC</th><th>ON UTC</th>
-        <th>飞行时间 Total</th><th>PIC</th><th>SIC</th><th>带飞</th><th>教员</th>
+        <th>飞行时间 Total</th><th>PIC</th><th>PIC U/S</th><th>SPIC</th><th>SIC</th><th>带飞</th><th>教员</th>
         <th>夜航</th><th>仪表</th>
         <th>昼间起降</th><th>夜间起降</th>
-        <th>角色</th><th>进近类型</th>
+        <th>角色</th><th>进近方式</th>
         <th>模拟机时间 Sim</th><th>备注</th>
       </tr>
     </thead>`;
@@ -143,6 +147,8 @@ function generateLogbookHtml(records: LogbookRecord[]): string {
       <td>${r.onTimeUtc ? r.onTimeUtc.slice(11, 16) : ''}</td>
       <td>${isFlight ? minutesToHHMM(r.blockTimeMin) : ''}</td>
       <td>${minutesToHHMM(r.picMin)}</td>
+      <td>${r.safePicUsMin > 0 ? minutesToHHMM(r.safePicUsMin) : ''}</td>
+      <td>${r.safeSpicMin > 0 ? minutesToHHMM(r.safeSpicMin) : ''}</td>
       <td>${minutesToHHMM(r.sicMin)}</td>
       <td>${minutesToHHMM(r.dualMin)}</td>
       <td>${minutesToHHMM(r.instructorMin)}</td>
@@ -217,8 +223,8 @@ function recordsToXlsxRows(records: LogbookRecord[]) {
     return records.map(r => ({
         '计划日期': r.schdDate,
         '实际日期': r.actlDate,
-        '机型': r.acftType,
-        '注册号': r.regNo ?? '',
+        '航空器型别': r.acftType,
+        '航空器登记号': r.regNo ?? '',
         '航段/SIM': r.dutyType === 'FLIGHT' ? r.routeString : (r.simNo ?? ''),
         '航班号': r.flightNo ?? '',
         'OFF(UTC)': r.offTimeUtc,
@@ -227,6 +233,8 @@ function recordsToXlsxRows(records: LogbookRecord[]) {
         'ON(UTC)': r.onTimeUtc,
         'Block(min)': r.blockTimeMin,
         'PIC(min)': r.picMin,
+        'PIC U/S(min)': r.safePicUsMin,
+        'SPIC(min)': r.safeSpicMin,
         'SIC(min)': r.sicMin,
         '带飞(min)': r.dualMin,
         '教员(min)': r.instructorMin,
@@ -238,7 +246,7 @@ function recordsToXlsxRows(records: LogbookRecord[]) {
         '昼间落地': r.dayLdg,
         '夜间落地': r.nightLdg,
         '角色': r.pilotRole ?? '',
-        '进近类型': r.approachType ?? '',
+        '进近方式': r.approachType ?? '',
         'SIM等级': r.simCat ?? '',
         '训练机构': r.trainingAgency ?? '',
         '训练类型': r.trainingType ?? '',
@@ -400,7 +408,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>版本</Text>
-                <Text style={styles.infoValue}>V1.1.0 (Phase 5)</Text>
+                <Text style={styles.infoValue}>1.0.0</Text>
             </View>
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>合规标准</Text>
@@ -408,7 +416,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             </View>
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>数据存储</Text>
-                <Text style={styles.infoValue}>100% 纯本地 SQLite（离线优先）</Text>
+                <Text style={styles.infoValue}>本地（离线优先）</Text>
             </View>
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>总记录数</Text>
@@ -417,7 +425,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
             {/* Offline privacy disclaimer */}
             <Text style={styles.offlineDisclaimer}>
-                当前为纯本地离线模式。您的所有飞行数据均存储于本设备，未连接任何外部云端，彻底保障数据隐私。
+                所有飞行经历数据均存储于本设备，未同步至任何外部服务器。统计基准：以北京时间（UTC+8）自然日为起算点，回溯 90 天，仅统计 FLIGHT（真实飞行）记录，不含 SIMULATOR（模拟机）训练。
             </Text>
         </ScrollView>
     );

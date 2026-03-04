@@ -26,6 +26,9 @@
             "package": "com.caac.digitallogbook"
         },
         "jsEngine": "hermes",
+        "extra": {
+            "workerUrl": "https://flight-proxy.caac-logbook.workers.dev"
+        },
         "plugins": []
     }
 }

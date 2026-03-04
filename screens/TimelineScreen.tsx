@@ -56,7 +56,7 @@ const TimelineScreenBase: React.FC<TimelineProps> = ({ logbooks }) => {
     const handleDelete = (record: LogbookRecord) => {
         Alert.alert(
             '删除记录',
-            '确定要删除该条飞行记录吗？删除后将无法在看板和报表中统计。',
+            '确定要删除该条记录吗？删除后该记录将不再纳入 Dashboard 统计与导出报表。',
             [
                 { text: '取消', style: 'cancel' },
                 {
@@ -128,7 +128,7 @@ const TimelineScreenBase: React.FC<TimelineProps> = ({ logbooks }) => {
                         <Text style={styles.emptyIcon}>📋</Text>
                         <Text style={styles.emptyTitle}>暂无飞行记录</Text>
                         <Text style={styles.emptySubtitle}>
-                            点击下方「+」号开始记录您的第一段飞行。
+                            点击「+ 新增记录」按钮开始记录您的第一段飞行经历。
                         </Text>
                     </View>
                 }

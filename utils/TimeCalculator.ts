@@ -309,7 +309,7 @@ export function inferOffOn(
  * independently of the WatermelonDB model.
  *
  * PRD §4.1 red-line formula:
- *   PIC + SIC + DUAL + INSTRUCTOR <= BLOCK_TIME
+ *   PIC + PIC_US + SPIC + SIC + DUAL + INSTRUCTOR <= BLOCK_TIME
  *
  * @returns  true if the record is compliant, false if it should be blocked.
  *
@@ -323,12 +323,56 @@ export function inferOffOn(
 export function isRoleTimeSumValid(params: {
     blockTimeMin: number;
     picMin: number;
+    picUsMin?: number;
+    spicMin?: number;
     sicMin: number;
     dualMin: number;
     instructorMin: number;
 }): boolean {
-    const { blockTimeMin, picMin, sicMin, dualMin, instructorMin } = params;
-    return picMin + sicMin + dualMin + instructorMin <= blockTimeMin;
+    const { blockTimeMin, picMin, picUsMin = 0, spicMin = 0, sicMin, dualMin, instructorMin } = params;
+    return picMin + picUsMin + spicMin + sicMin + dualMin + instructorMin <= blockTimeMin;
+}
+
+// ─── 7. Night-Hint Threshold ──────────────────────────────────────────────────
+
+/**
+ * Returns true if the given local time input represents 19:00 or later,
+ * which triggers the night-flight field soft highlight (PRD V1.1 §3.2).
+ *
+ * Design for keystroke safety:
+ *  - Called on every `onChangeText` event, so it MUST be resilient to
+ *    partial input (e.g. "", "1", "19", "190") without flickering.
+ *  - Returns false for any input that has fewer than 4 digits after stripping
+ *    non-digit chars — only a complete, parseable HHMM triggers the hint.
+ *  - Does NOT throw — all invalid/partial input silently returns false.
+ *
+ * @param rawLocalTime - Raw numeric input from the time field (e.g. "1900", "2100", "19").
+ * @returns true only when the input is a complete HHMM ≥ 1900 (i.e. hours ≥ 19).
+ *
+ * @example
+ * isNightHintTime('')      // → false  (empty, no hint)
+ * isNightHintTime('1')     // → false  (partial, no hint)
+ * isNightHintTime('19')    // → false  (partial — user still typing minutes)
+ * isNightHintTime('190')   // → false  (partial)
+ * isNightHintTime('1859')  // → false  (complete, but 18:59 < 19:00)
+ * isNightHintTime('1900')  // → true   (exactly 19:00 — threshold)
+ * isNightHintTime('2130')  // → true   (21:30, night flight)
+ * isNightHintTime('2359')  // → true   (23:59, late night)
+ */
+export function isNightHintTime(rawLocalTime: string): boolean {
+    // Strip non-digits
+    const digits = (rawLocalTime ?? '').replace(/\D/g, '');
+
+    // Require exactly 4 digits — partial input must never trigger the hint
+    if (digits.length < 4) return false;
+
+    // Parse hours from the first two digits of the 4-digit block
+    const hours = parseInt(digits.slice(0, 2), 10);
+
+    // Guard: NaN or invalid hours → false
+    if (isNaN(hours)) return false;
+
+    return hours >= 19;
 }
 
 // ─── 7. Night-Hint Threshold ──────────────────────────────────────────────────
