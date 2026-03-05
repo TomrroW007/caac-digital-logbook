@@ -13,12 +13,12 @@
  *   返回 { error: "NOT_FOUND" }（HTTP 200，软报错，App 优雅降级）
  *
  * 关键设计说明：
- *   1. HTTP 洗白：AviationStack 免费版仅支持 http://，直连会被 iOS/Android 封杀。
- *      Worker 在云端以 http:// 请求 AviationStack，App 侧始终使用 https:// 访问
- *      Worker，彻底规避 App Transport Security / Cleartext Traffic 限制。
- *   2. 历史查询：使用 flight_date 参数，支持查询已落地的历史航班，完全贴合
- *      飞行员下机后补填 Logbook 的真实场景。
- *   3. 极激进缓存：TTL 30 天（2 592 000 秒），保卫 500 次/月免费额度。
+ *   1. HTTPS 代理：官方文档 Base URL 为 https://api.aviationstack.com/v1/（Basic Plan+）。
+ *      App 通过 https:// 访问 Worker，Worker 再以 https:// 请求 AviationStack，
+ *      全链路加密，完全兼容 iOS ATS 和 Android Cleartext Traffic 策略。
+ *   2. 历史查询：使用 flight_date 参数（需 Basic Plan 及以上），支持查询已落地的
+ *      历史航班，完全贴合飞行员下机后补填 Logbook 的真实场景。
+ *   3. 极激进缓存：TTL 30 天（2 592 000 秒），保卫免费月度额度。
  *      国内定期航班机型/航线在一个航季内基本固定，命中率极高。
  *
  * Env bindings (wrangler.toml / Cloudflare Dashboard):
@@ -85,7 +85,7 @@ export default {
         }
 
         const apiUrl =
-            `http://api.aviationstack.com/v1/flights` +
+            `https://api.aviationstack.com/v1/flights` +
             `?access_key=${apiKey}` +
             `&${paramKey}=${encodeURIComponent(cleanedNo)}` +
             `&flight_date=${flightDate}` +
