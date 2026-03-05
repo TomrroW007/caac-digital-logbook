@@ -1,16 +1,14 @@
-name: Run Jest & Typecheck
+name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
-  test:
-    name: Run Jest & Typecheck
+  test_job: 
+    name: Jest and Typecheck
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
