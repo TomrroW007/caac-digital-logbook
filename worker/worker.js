@@ -64,22 +64,21 @@ export default {
             return json({ error: 'INVALID_PARAMS' });
         }
 
-        // ── ICAO 3 字母前缀 → IATA 2 字母转换 ──────────────────────────────
-        //    e.g. "CCA1501" → "CA1501"
-        let flightIata = flightNo.replace(/\s+/g, '');
-        if (/^[A-Z]{3}\d/.test(flightIata)) {
-            flightIata = flightIata.slice(0, 2) + flightIata.slice(3);
-        }
+        // ── 识别用户输入：ICAO（3 字母，如 CCA1501）或 IATA（2 字母，如 CA1501）──
+        //    直接使用 AviationStack 原生支持的 flight_icao / flight_iata 参数，
+        //    彻底避免自行 slice 拼接导致的 CCA→CC 致命错误。
+        const cleanedNo = flightNo.replace(/\s+/g, '');
+        const isIcao    = /^[A-Z]{3}\d/.test(cleanedNo);
+        const paramKey  = isIcao ? 'flight_icao' : 'flight_iata';
 
         // ── 1. KV 缓存拦截（极速路径）───────────────────────────────────────
-        const cacheKey = `${flightIata}_${flightDate}`;
+        const cacheKey = `${cleanedNo}_${flightDate}`;
         const cached = await env.FLIGHT_CACHE.get(cacheKey, 'json');
         if (cached) {
             return json(cached, { 'X-Cache': 'HIT' });
         }
 
         // ── 2. 请求 AviationStack（含历史查询 flight_date 参数）─────────────
-        //    ⚠️ 免费版仅支持 http://；Worker 在云端发起，App 侧正常用 https://
         const apiKey = env.AVIATIONSTACK_API_KEY;
         if (!apiKey) {
             return json({ error: 'API_NOT_CONFIGURED' });
@@ -88,8 +87,9 @@ export default {
         const apiUrl =
             `http://api.aviationstack.com/v1/flights` +
             `?access_key=${apiKey}` +
-            `&flight_iata=${encodeURIComponent(flightIata)}` +
-            `&flight_date=${flightDate}`;
+            `&${paramKey}=${encodeURIComponent(cleanedNo)}` +
+            `&flight_date=${flightDate}` +
+            `&limit=1`;
 
         try {
             const res = await fetch(apiUrl, { signal: AbortSignal.timeout(6000) });
