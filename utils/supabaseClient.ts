@@ -74,9 +74,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// ⚠️  替换为你在 Supabase Dashboard 获取的真实值，切勿提交 Secret Key 到公开仓库
-export const SUPABASE_URL      = 'https://your-project-id.supabase.co';
-export const SUPABASE_ANON_KEY = 'your-anon-key';
+export const SUPABASE_URL      = 'https://kwwcedgpvudecyqqigik.supabase.co';
+export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3d2NlZGdwdnVkZWN5cXFpZ2lrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2OTM5NTEsImV4cCI6MjA4ODI2OTk1MX0.vLcr-rV5j8gD4gPZNavjC0DFGD4QzCcp_ZkpQhMAaZU';
 
 /**
  * 判断 Supabase 是否已配置（未替换占位值则视为未配置，进入本地模式）。
