@@ -42,10 +42,29 @@ npx jest --verbose
 
 # 部署 Cloudflare Worker（可选）
 cd worker
-npx wrangler kv:namespace create "FLIGHT_CACHE"
-npx wrangler secret put AIRLABS_KEY
+
+# Wrangler v4 KV 命令语法（若 namespace 已存在会报已存在，可直接跳过）
+npx wrangler kv namespace create "FLIGHT_CACHE"
+npx wrangler kv namespace create "FLIGHT_CACHE" --env staging
+
+# 注入生产环境 Secrets
+npx wrangler secret put AVIATIONSTACK_KEY --env=""
+npx wrangler secret put AIRLABS_KEY --env=""
+
+# 注入预发布环境 Secrets（不要漏）
+npx wrangler secret put AVIATIONSTACK_KEY --env staging
+npx wrangler secret put AIRLABS_KEY --env staging
+
+# 部署预发布环境（release/pre-launch-deployment 分支）
+npx wrangler deploy --env staging
+
+# 部署生产环境（main 分支）
 npx wrangler deploy
 ```
+
+Worker 域名约定：
+- Staging: `https://caac-logbook-worker-staging.<your-subdomain>.workers.dev`
+- Production: `https://caac-logbook-worker.<your-subdomain>.workers.dev`
 
 ## 📂 项目结构
 

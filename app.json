@@ -36,7 +36,7 @@
         },
         "jsEngine": "hermes",
         "extra": {
-            "workerUrl": "https://flight-proxy.caac-logbook.workers.dev"
+            "workerUrl": "https://caac-logbook-worker.caac-logbook.workers.dev"
         },
         "plugins": []
     }

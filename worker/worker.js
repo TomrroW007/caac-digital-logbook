@@ -37,8 +37,11 @@
  *
  * Env bindings (wrangler.toml / Cloudflare Dashboard):
  *   FLIGHT_CACHE           — KV namespace
- *   AVIATIONSTACK_API_KEY  — secret（wrangler secret put AVIATIONSTACK_API_KEY）
- *   AIRLABS_API_KEY        — secret（wrangler secret put AIRLABS_API_KEY）
+ *   AVIATIONSTACK_KEY      — secret（wrangler secret put AVIATIONSTACK_KEY）
+ *   AIRLABS_KEY            — secret（wrangler secret put AIRLABS_KEY）
+ *
+ * Backward compatibility:
+ *   Also accepts legacy AVIATIONSTACK_API_KEY / AIRLABS_API_KEY if present.
  */
 
 // ─── CORS 头（允许 App 任意来源跨域请求）────────────────────────────────────
@@ -166,13 +169,17 @@ export default {
             return json(cached, { 'X-Cache': 'HIT' });
         }
 
+        // Canonical secret names with fallback to legacy names.
+        const aviationstackKey = env.AVIATIONSTACK_KEY || env.AVIATIONSTACK_API_KEY;
+        const airlabsKey = env.AIRLABS_KEY || env.AIRLABS_API_KEY;
+
         // ═══════════════════════════════════════════════════════════════════════
         // Tier 2: AviationStack（主力 API，免费版仅支持实时/近期航班）
         // ═══════════════════════════════════════════════════════════════════════
         let result = await tryAviationStack(
             cleanedNo,
             isIcao,
-            env.AVIATIONSTACK_API_KEY
+            aviationstackKey
         );
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -190,7 +197,7 @@ export default {
             const airLabsResult = await tryAirLabs(
                 cleanedNo,
                 isIcao,
-                env.AIRLABS_API_KEY
+                airlabsKey
             );
 
             if (airLabsResult) {
