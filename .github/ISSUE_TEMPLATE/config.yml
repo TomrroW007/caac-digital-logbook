@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 查阅项目需求文档 (PRD)
+    url: https://github.com/TomrroW007/caac-digital-logbook/blob/main/PRD.md
+    about: 在提出新需求前，请参阅当前的 产品需求文档(PRD)。
