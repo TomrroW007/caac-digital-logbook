@@ -66,6 +66,22 @@ Worker 域名约定：
 - Staging: `https://caac-logbook-worker-staging.<your-subdomain>.workers.dev`
 - Production: `https://caac-logbook-worker.<your-subdomain>.workers.dev`
 
+## 🔁 GitHub 持续部署（Cloudflare Pages）
+
+本仓库已添加自动发布工作流：`.github/workflows/deploy-pages.yml`
+
+触发规则：
+- 推送到 `main` 分支时自动构建并发布 Web 站点。
+- 也可在 GitHub Actions 页面手动执行 `workflow_dispatch`。
+
+你只需在 GitHub 仓库 `Settings > Secrets and variables > Actions` 新增：
+- `CLOUDFLARE_API_TOKEN`：Cloudflare API Token（至少包含 Pages 编辑权限）。
+- `CLOUDFLARE_ACCOUNT_ID`：Cloudflare 账户 ID。
+
+部署目标：
+- Project Name: `caac-digital-logbook`
+- Public URL: `https://caac-digital-logbook.pages.dev`
+
 ## 📂 项目结构
 
 ```
