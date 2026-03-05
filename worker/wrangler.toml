@@ -12,6 +12,19 @@ compatibility_date = "2026-03-05"
 #   AVIATIONSTACK_API_KEY=your_aviationstack_key_here
 #   AIRLABS_API_KEY=your_airlabs_key_here
 
+# ==========================================================
+# 🚀 生产环境 (Production)
+# ==========================================================
 [[kv_namespaces]]
 binding = "FLIGHT_CACHE"
 id = "372feeb0a41f45b5a47935c0cf71c800"
+
+# ==========================================================
+# 🧪 预发布环境 (Staging)
+# ==========================================================
+[env.staging]
+name = "flight-proxy-staging"
+
+[[env.staging.kv_namespaces]]
+binding = "FLIGHT_CACHE"
+id = "2fc9a28ddf304796bc20afcdb21ed3ce"
