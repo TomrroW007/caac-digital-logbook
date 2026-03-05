@@ -4,9 +4,8 @@ compatibility_date = "2024-01-01"
 
 [vars]
 # ── API Keys ─────────────────────────────────────────────────────────────────
-# Set via `wrangler secret put AIRLABS_KEY` (preferred) or here for dev.
-# AIRLABS_KEY = ""
-# AVIATIONSTACK_KEY = ""
+# 通过 `wrangler secret put AVIATIONSTACK_API_KEY` 设置（推荐），不要明文写入此文件。
+# AVIATIONSTACK_API_KEY = ""
 
 [[kv_namespaces]]
 binding = "FLIGHT_CACHE"
