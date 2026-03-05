@@ -1,0 +1,27 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Cloudflare Worker 本地开发环境配置模板
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# 使用步骤：
+#   1. 复制此文件：cp .dev.vars.template .dev.vars
+#   2. 在 AviationStack (https://aviationstack.com/) 和 AirLabs (https://airlabs.co/)
+#      官网注册账号，获取免费 API Key
+#   3. 将下方的密钥替换为您的真实密钥
+#   4. 执行 wrangler dev 启动本地开发服务器：http://localhost:8787
+#
+# ⚠️  安全提示：
+#   - .dev.vars 已加入 .gitignore，绝不会被提交到 Git 仓库
+#   - 生产环境密钥必须通过 wrangler secret put 命令注入到 Cloudflare，
+#     绝不能明文写入 wrangler.toml 或代码文件
+#
+# ═══════════════════════════════════════════════════════════════════════════
+
+# AviationStack API Key（主力 API，支持历史航班查询）
+# 免费额度：500 次/月，仅支持 HTTP（由 Worker 在云端发起）
+# 官网：https://aviationstack.com/
+AVIATIONSTACK_API_KEY=your_aviationstack_key_here
+
+# AirLabs API Key（备用 API，仅限实时在空航班）
+# 免费额度：1000 次/月，支持 HTTPS
+# 官网：https://airlabs.co/
+AIRLABS_API_KEY=your_airlabs_key_here

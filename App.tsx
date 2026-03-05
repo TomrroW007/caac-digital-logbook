@@ -13,6 +13,7 @@
  */
 
 import React from 'react';
+import { Platform, View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -24,6 +25,7 @@ import { TimelineScreen } from './screens/TimelineScreen';
 import { EntryFormScreen } from './screens/EntryFormScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { AppErrorBoundary } from './components/shared/AppErrorBoundary';
+import { PwaInstallPrompt } from './components/shared/PwaInstallPrompt';
 
 // ─── Navigation Type Definitions ─────────────────────────────────────────────
 
@@ -55,8 +57,9 @@ export default function App() {
     return (
         <AppErrorBoundary>
             <DatabaseProvider database={database}>
-                <NavigationContainer>
-                    <StatusBar style="light" backgroundColor="#0A0F1E" />
+                <View style={styles.root}>
+                    <NavigationContainer>
+                        <StatusBar style="light" backgroundColor="#0A0F1E" />
                     <Stack.Navigator
                         initialRouteName="Dashboard"
                         screenOptions={SCREEN_OPTIONS}
@@ -85,8 +88,18 @@ export default function App() {
                             options={{ title: '设置与导出' }}
                         />
                     </Stack.Navigator>
-                </NavigationContainer>
+                    </NavigationContainer>
+                    {/* PWA install guide — web-only, absolute overlay at bottom */}
+                    {Platform.OS === 'web' && <PwaInstallPrompt />}
+                </View>
             </DatabaseProvider>
         </AppErrorBoundary>
     );
 }
+
+const styles = StyleSheet.create({
+    root: {
+        flex: 1,
+        position: 'relative',
+    },
+});

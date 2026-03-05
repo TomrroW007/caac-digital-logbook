@@ -14,6 +14,15 @@
         "assetBundlePatterns": [
             "**/*"
         ],
+        "web": {
+            "bundler": "metro",
+            "favicon": "./assets/favicon.png",
+            "name": "Pilot Logbook 飞行记录本",
+            "shortName": "Pilot",
+            "display": "standalone",
+            "backgroundColor": "#0A0F1E",
+            "themeColor": "#0A0F1E"
+        },
         "ios": {
             "supportsTablet": false,
             "bundleIdentifier": "com.caac.digitallogbook"
