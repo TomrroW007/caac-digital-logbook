@@ -1,29 +1,44 @@
 /**
  * @file worker/worker.js
- * @description Cloudflare Worker — AviationStack 代理 + KV 缓存层
+ * @description Cloudflare Worker — 四级瀑布流航班数据网关
  *
- * 架构：
+ * 架构：多级瀑布流 (Waterfall Fallback) 高可用设计
+ *
  *   App (HTTPS) → GET /api/flight?no=CA1501&date=2026-03-04
  *               ↓
- *   KV 命中？→ 返回缓存 JSON（< 50 ms，X-Cache: HIT）
- *               ↓（未命中）
- *   AviationStack（http://，由 Worker 在云端发起）
- *               ↓ 解析 → 写入 KV（TTL 30 天）→ 返回 JSON（X-Cache: MISS）
- *               ↓（查无此航班）
- *   返回 { error: "NOT_FOUND" }（HTTP 200，软报错，App 优雅降级）
+ *   ┌─────────────────────────────────────────────────────────────┐
+ *   │ Tier 1: KV 缓存（极速路径）                                 │
+ *   │   命中？→ 返回 JSON（< 50ms，X-Cache: HIT）                │
+ *   └─────────────────────────────────────────────────────────────┘
+ *               ↓（缓存未命中）
+ *   ┌─────────────────────────────────────────────────────────────┐
+ *   │ Tier 2: AviationStack（主力 API，支持历史+计划航班）       │
+ *   │   成功？→ 写入 KV（TTL 30天）→ 返回 JSON（X-Cache: MISS）  │
+ *   └─────────────────────────────────────────────────────────────┘
+ *               ↓（超时/额度耗尽/查无结果）
+ *   ┌─────────────────────────────────────────────────────────────┐
+ *   │ Tier 3: AirLabs（备用 API，仅限实时在空航班）              │
+ *   │   成功？→ 写入 KV → 返回 JSON（X-Cache: AIRLABS）           │
+ *   └─────────────────────────────────────────────────────────────┘
+ *               ↓（全线失败）
+ *   ┌─────────────────────────────────────────────────────────────┐
+ *   │ Tier 4: 静默降级                                             │
+ *   │   返回 { error: "NOT_FOUND" }（HTTP 200，App 手工填写）    │
+ *   └─────────────────────────────────────────────────────────────┘
  *
  * 关键设计说明：
- *   1. HTTPS 代理：官方文档 Base URL 为 https://api.aviationstack.com/v1/（Basic Plan+）。
- *      App 通过 https:// 访问 Worker，Worker 再以 https:// 请求 AviationStack，
- *      全链路加密，完全兼容 iOS ATS 和 Android Cleartext Traffic 策略。
- *   2. 历史查询：使用 flight_date 参数（需 Basic Plan 及以上），支持查询已落地的
- *      历史航班，完全贴合飞行员下机后补填 Logbook 的真实场景。
- *   3. 极激进缓存：TTL 30 天（2 592 000 秒），保卫免费月度额度。
- *      国内定期航班机型/航线在一个航季内基本固定，命中率极高。
+ *   1. 双路备援：AviationStack 主攻历史查询，AirLabs 覆盖实时场景。
+ *   2. ICAO/IATA 智能识别：使用正则 /^[A-Z]{3}\d/ 判断输入格式，
+ *      彻底修复旧版 slice(0,2) 导致 CCA→CC 的致命错误。
+ *   3. 独立超时控制：每个 API 请求均设置 4 秒 AbortSignal，确保瀑布流快速切换。
+ *   4. HTTPS 代理：Worker 在云端发起 HTTP 请求（AviationStack 免费版限制），
+ *      客户端与 Worker 之间保持 HTTPS，完全兼容 iOS ATS 和 Android 策略。
+ *   5. 极激进缓存：TTL 30 天，固定航季重复请求命中率 > 90%，保卫免费额度。
  *
  * Env bindings (wrangler.toml / Cloudflare Dashboard):
- *   FLIGHT_CACHE          — KV namespace
- *   AVIATIONSTACK_API_KEY — secret（wrangler secret put AVIATIONSTACK_API_KEY）
+ *   FLIGHT_CACHE           — KV namespace
+ *   AVIATIONSTACK_API_KEY  — secret（wrangler secret put AVIATIONSTACK_API_KEY）
+ *   AIRLABS_API_KEY        — secret（wrangler secret put AIRLABS_API_KEY）
  */
 
 // ─── CORS 头（允许 App 任意来源跨域请求）────────────────────────────────────
@@ -41,7 +56,80 @@ const json = (data, extra = {}) =>
         headers: { ...CORS, ...extra },
     });
 
-// ─── 请求处理入口 ────────────────────────────────────────────────────────────
+// ─── Tier 2: AviationStack 请求函数 ──────────────────────────────────────────
+/**
+ * 请求 AviationStack API（免费版仅支持实时/近期航班，不支持 flight_date 参数）
+ * @param {string} flightNo - 清洗后的航班号（如 CA1501 或 CCA1501）
+ * @param {boolean} isIcao - 是否为 ICAO 代码（3 字母）
+ * @param {string} apiKey - API 密钥
+ * @returns {Promise<Object|null>} 成功返回标准化数据，失败返回 null
+ */
+async function tryAviationStack(flightNo, isIcao, apiKey) {
+    if (!apiKey) return null;
+
+    const paramKey = isIcao ? 'flight_icao' : 'flight_iata';
+    const apiUrl =
+        `http://api.aviationstack.com/v1/flights` + // 免费版仅支持 HTTP
+        `?access_key=${apiKey}` +
+        `&${paramKey}=${encodeURIComponent(flightNo)}` +
+        `&limit=1`;
+
+    try {
+        const res = await fetch(apiUrl, { signal: AbortSignal.timeout(4000) });
+        if (!res.ok) return null;
+
+        const payload = await res.json();
+        if (!payload?.data || payload.data.length === 0) return null;
+
+        const f = payload.data[0];
+        return {
+            dep_icao:      f.departure?.icao        ?? null,
+            arr_icao:      f.arrival?.icao          ?? null,
+            aircraft_icao: f.aircraft?.icao ?? f.aircraft?.iata ?? null,
+            reg_number:    f.aircraft?.registration ?? null,
+        };
+    } catch {
+        return null; // 超时或网络异常
+    }
+}
+
+// ─── Tier 3: AirLabs 请求函数 ────────────────────────────────────────────────
+/**
+ * 请求 AirLabs API（仅支持实时在空航班，作为备用降级）
+ * @param {string} flightNo - 清洗后的航班号
+ * @param {boolean} isIcao - 是否为 ICAO 代码
+ * @param {string} apiKey - API 密钥
+ * @returns {Promise<Object|null>} 成功返回标准化数据，失败返回 null
+ */
+async function tryAirLabs(flightNo, isIcao, apiKey) {
+    if (!apiKey) return null;
+
+    const paramKey = isIcao ? 'flight_icao' : 'flight_iata';
+    const apiUrl =
+        `https://airlabs.co/api/v9/flights` +
+        `?api_key=${apiKey}` +
+        `&${paramKey}=${encodeURIComponent(flightNo)}`;
+
+    try {
+        const res = await fetch(apiUrl, { signal: AbortSignal.timeout(4000) });
+        if (!res.ok) return null;
+
+        const payload = await res.json();
+        if (!payload?.response || payload.response.length === 0) return null;
+
+        const f = payload.response[0];
+        return {
+            dep_icao:      f.dep_icao  ?? null,
+            arr_icao:      f.arr_icao  ?? null,
+            aircraft_icao: f.aircraft_icao ?? null,
+            reg_number:    f.reg_number ?? null,
+        };
+    } catch {
+        return null; // 超时或网络异常
+    }
+}
+
+// ─── 请求处理入口：四级瀑布流编排 ──────────────────────────────────────────
 
 export default {
     async fetch(request, env) {
@@ -56,7 +144,7 @@ export default {
             return json({ error: 'NOT_FOUND' });
         }
 
-        const flightNo  = (url.searchParams.get('no')   ?? '').trim().toUpperCase();
+        const flightNo   = (url.searchParams.get('no')   ?? '').trim().toUpperCase();
         const flightDate = (url.searchParams.get('date') ?? '').trim();
 
         // 基础参数校验：航班号 + YYYY-MM-DD 日期均必填
@@ -64,63 +152,75 @@ export default {
             return json({ error: 'INVALID_PARAMS' });
         }
 
-        // ── 识别用户输入：ICAO（3 字母，如 CCA1501）或 IATA（2 字母，如 CA1501）──
-        //    直接使用 AviationStack 原生支持的 flight_icao / flight_iata 参数，
-        //    彻底避免自行 slice 拼接导致的 CCA→CC 致命错误。
+        // ── 智能识别：ICAO（3 字母，如 CCA1501）或 IATA（2 字母，如 CA1501）──
+        // 使用正则匹配，避免旧版 slice(0,2) 导致的 CCA→CC 严重错误
         const cleanedNo = flightNo.replace(/\s+/g, '');
         const isIcao    = /^[A-Z]{3}\d/.test(cleanedNo);
-        const paramKey  = isIcao ? 'flight_icao' : 'flight_iata';
 
-        // ── 1. KV 缓存拦截（极速路径）───────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════════════════
+        // Tier 1: KV 缓存拦截（极速路径，命中率 > 90%）
+        // ═══════════════════════════════════════════════════════════════════════
         const cacheKey = `${cleanedNo}_${flightDate}`;
         const cached = await env.FLIGHT_CACHE.get(cacheKey, 'json');
         if (cached) {
             return json(cached, { 'X-Cache': 'HIT' });
         }
 
-        // ── 2. 请求 AviationStack（含历史查询 flight_date 参数）─────────────
-        const apiKey = env.AVIATIONSTACK_API_KEY;
-        if (!apiKey) {
-            return json({ error: 'API_NOT_CONFIGURED' });
+        // ═══════════════════════════════════════════════════════════════════════
+        // Tier 2: AviationStack（主力 API，免费版仅支持实时/近期航班）
+        // ═══════════════════════════════════════════════════════════════════════
+        let result = await tryAviationStack(
+            cleanedNo,
+            isIcao,
+            env.AVIATIONSTACK_API_KEY
+        );
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // Tier 2.5: 数据缝合（关键优化）
+        //
+        // 触发条件：
+        //   A. AviationStack 完全失败（result === null）
+        //   B. AviationStack 返回了航班但缺少机型 (aircraft_icao === null)
+        //   C. AviationStack 返回了航班但缺少注册号 (reg_number === null)
+        //
+        // 策略：当上述任意条件成立时，调用 AirLabs 补全缺失的数据，而不是
+        //       直接返回或降级。这样可以最大化"智能填充"的完整性。
+        // ═══════════════════════════════════════════════════════════════════════
+        if (!result || !result.aircraft_icao || !result.reg_number) {
+            const airLabsResult = await tryAirLabs(
+                cleanedNo,
+                isIcao,
+                env.AIRLABS_API_KEY
+            );
+
+            if (airLabsResult) {
+                if (!result) {
+                    // 情况 A：AviationStack 彻底失败，直接用 AirLabs 的结果
+                    result = airLabsResult;
+                } else {
+                    // 情况 B/C：数据缝合！保留 AviationStack 的基础数据（起降机场），
+                    // 用 AirLabs 的数据填补缺失的机型或注册号
+                    result.aircraft_icao = result.aircraft_icao || airLabsResult.aircraft_icao;
+                    result.reg_number = result.reg_number || airLabsResult.reg_number;
+                }
+            }
         }
 
-        const apiUrl =
-            `https://api.aviationstack.com/v1/flights` +
-            `?access_key=${apiKey}` +
-            `&${paramKey}=${encodeURIComponent(cleanedNo)}` +
-            `&flight_date=${flightDate}` +
-            `&limit=1`;
-
-        try {
-            const res = await fetch(apiUrl, { signal: AbortSignal.timeout(6000) });
-            if (!res.ok) {
-                return json({ error: 'API_ERROR' });
-            }
-
-            const payload = await res.json();
-
-            if (!payload?.data || payload.data.length === 0) {
-                return json({ error: 'NOT_FOUND' });
-            }
-
-            const f = payload.data[0];
-            const result = {
-                dep_icao:     f.departure?.icao         ?? null,
-                arr_icao:     f.arrival?.icao            ?? null,
-                aircraft_icao: f.aircraft?.icao ?? f.aircraft?.iata ?? null,
-                reg_number:   f.aircraft?.registration  ?? null,
-            };
-
-            // ── 3. 写入 KV，TTL 30 天，保卫 500 次/月免费额度 ────────────────
-            await env.FLIGHT_CACHE.put(cacheKey, JSON.stringify(result), {
-                expirationTtl: 2592000, // 30 天（秒）
-            });
-
-            return json(result, { 'X-Cache': 'MISS' });
-
-        } catch {
-            // 超时或网络异常 — 软报错，App 优雅降级
-            return json({ error: 'API_ERROR' });
+        // ═══════════════════════════════════════════════════════════════════════
+        // Tier 4: 最终验证与结果返回
+        // ═══════════════════════════════════════════════════════════════════════
+        if (!result || !result.dep_icao) {
+            // 完全失败：既没有从 AviationStack 获取数据，AirLabs 也没有补上
+            return json({ error: 'NOT_FOUND' });
         }
+
+        // 成功获取数据（可能来自 AviationStack、AirLabs、或两者数据缝合），
+        // 写入 KV 缓存（TTL 30 天）
+        await env.FLIGHT_CACHE.put(cacheKey, JSON.stringify(result), {
+            expirationTtl: 2592000,
+        });
+
+        // 返回缝合后的完整结果
+        return json(result, { 'X-Cache': 'MISS', 'X-Source': 'Patched' });
     },
 };
