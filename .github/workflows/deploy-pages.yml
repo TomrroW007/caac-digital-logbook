@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - release/pre-launch-deployment
   workflow_dispatch:
 
 concurrency:
@@ -41,7 +42,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy to Cloudflare Pages
-        run: npx wrangler@4.70.0 pages deploy dist --project-name caac-digital-logbook --branch main
+        run: npx wrangler@4.70.0 pages deploy dist --project-name caac-digital-logbook --branch ${{ github.ref_name }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
