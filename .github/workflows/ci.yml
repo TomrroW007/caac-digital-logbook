@@ -1,17 +1,22 @@
-name: Run Jest & Typecheck
+name: CI Process
 
 on:
   push:
     branches:
       - main
+      - release/main
+      - release/pre-launch-deployment
   pull_request:
     branches:
       - main
+      - release/main
+      - release/pre-launch-deployment
 
 jobs:
-  test:
-    name: Run Jest & Typecheck
+  ci_task:
+    name: Continuous Integration Checks
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
