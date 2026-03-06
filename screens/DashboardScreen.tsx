@@ -3,7 +3,7 @@
  * @description Dashboard with reactive observables for 90-day experience and totals.
  */
 
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -28,7 +28,7 @@ import {
 } from '../utils/ComplianceValidator';
 import { minutesToHHMM } from '../utils/TimeCalculator';
 import { readSyncStatus, type SyncStatus } from '../utils/SyncService';
-import { isSupabaseConfigured } from '../utils/supabaseClient';
+import SyncStatusCapsule from '../components/shared/SyncStatusCapsule';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
 
@@ -73,23 +73,6 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
             return () => { cancelled = true; };
         }, []),
     );
-
-    /** 将 SyncStatus 转换为可视化配置（颜色 + 文案） */
-    const syncIndicator = useMemo((): { dot: string; label: string; color: string } => {
-        if (!isSupabaseConfigured()) {
-            return { dot: '🔴', label: '本地模式', color: COLORS.textSecondary };
-        }
-        switch (syncStatus.state) {
-            case 'synced':
-                return { dot: '🟢', label: '已同步', color: COLORS.success };
-            case 'syncing':
-                return { dot: '🟡', label: '同步中…', color: COLORS.warning };
-            case 'error':
-                return { dot: '🔴', label: '同步失败', color: COLORS.error };
-            default:
-                return { dot: '⚫', label: '未登录', color: COLORS.textSecondary };
-        }
-    }, [syncStatus]);
 
     // ── 90-Day Experience Calculation ──
     const experienceReport = useMemo(() => {
@@ -145,18 +128,13 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                     </View>
                 )}
 
-                {/* Header */}
+                    {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
                         <Text style={styles.title}>✈ Pilot Logbook</Text>
                         <Text style={styles.subtitle}>飞行经历记录本</Text>
                     </View>
-                    <View style={styles.syncBadge}>
-                        <Text style={styles.syncDot}>{syncIndicator.dot}</Text>
-                        <Text style={[styles.syncLabel, { color: syncIndicator.color }]}>
-                            {syncIndicator.label}
-                        </Text>
-                    </View>
+                    <SyncStatusCapsule status={syncStatus} />
                 </View>
 
                 {/* 90-Day Experience Card — PRD §4.2 dual-row layout */}
@@ -281,14 +259,6 @@ const styles = StyleSheet.create({
     headerLeft: { flex: 1 },
     title: { color: COLORS.text, fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
     subtitle: { color: COLORS.textSecondary, fontSize: 14, marginTop: 4 },
-    syncBadge: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingLeft: 12,
-        paddingTop: 2,
-    },
-    syncDot: { fontSize: 14, lineHeight: 20 },
-    syncLabel: { fontSize: 10, fontWeight: '600', marginTop: 2 },
 
     alertCard: {
         borderWidth: 1.5,

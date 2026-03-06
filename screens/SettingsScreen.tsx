@@ -13,7 +13,7 @@
  *   4. Call expo-sharing to hand off to the OS share sheet.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -23,6 +23,9 @@ import {
     Alert,
     ActivityIndicator,
     Platform,
+    Modal,
+    TextInput,
+    KeyboardAvoidingView,
 } from 'react-native';
 
 // Native-only imports: guarded by Platform.OS checks at call sites.
@@ -49,7 +52,9 @@ import {
     type ImportResult,
 } from '../utils/ImportService';
 import { syncWithCloud } from '../utils/SyncService';
-import { isSupabaseConfigured } from '../utils/supabaseClient';
+import { isSupabaseConfigured, supabase } from '../utils/supabaseClient';
+import { subscribeToAuthChanges } from '../utils/SyncService';
+import type { Session } from '@supabase/supabase-js';
 
 // ─── PDF HTML Generation ───────────────────────────────────────────────────────
 // Strategy: "Chunked Tables" (one independent DOM per page) to guarantee
@@ -301,6 +306,24 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
     const [syncing, setSyncing] = useState(false);
     const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
+    // ── 鉴权状态 ──────────────────────────────────────────────────────────────
+    const [session, setSession] = useState<Session | null>(null);
+    const [showAuthModal, setShowAuthModal] = useState(false);
+    const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [authLoading, setAuthLoading] = useState(false);
+    const [authError, setAuthError] = useState<string | null>(null);
+
+    // 订阅 Supabase 鉴权状态变化（含首次加载时恢复已有 session）
+    useEffect(() => {
+        if (!isSupabaseConfigured()) return;
+        // 初始化：尝试拿到当前 session
+        supabase.auth.getSession().then(({ data }) => setSession(data.session));
+        const unsubscribe = subscribeToAuthChanges(s => setSession(s));
+        return unsubscribe;
+    }, []);
+
     // ── PDF Export ───────────────────────────────────────────────────────────
     const handlePdfExport = async () => {
         if (logbooks.length === 0) {
@@ -474,6 +497,68 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
     };
 
     // ── 云端同步 ──────────────────────────────────────────────────────────────
+    const handleSignIn = async () => {
+        if (!email.trim() || !password) {
+            setAuthError('请输入邮箱和密码');
+            return;
+        }
+        setAuthLoading(true);
+        setAuthError(null);
+        try {
+            const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+            if (error) {
+                setAuthError(error.message);
+            } else {
+                setShowAuthModal(false);
+                setEmail('');
+                setPassword('');
+            }
+        } finally {
+            setAuthLoading(false);
+        }
+    };
+
+    const handleSignUp = async () => {
+        if (!email.trim() || !password) {
+            setAuthError('请输入邮箱和密码');
+            return;
+        }
+        if (password.length < 6) {
+            setAuthError('密码至少 6 位');
+            return;
+        }
+        setAuthLoading(true);
+        setAuthError(null);
+        try {
+            const { error } = await supabase.auth.signUp({ email: email.trim(), password });
+            if (error) {
+                setAuthError(error.message);
+            } else {
+                Alert.alert(
+                    '注册成功',
+                    '请查收验证邮件并点击链接激活账号，然后回到此页面登录。',
+                    [{ text: '知道了', onPress: () => { setShowAuthModal(false); setEmail(''); setPassword(''); } }],
+                );
+            }
+        } finally {
+            setAuthLoading(false);
+        }
+    };
+
+    const handleSignOut = async () => {
+        Alert.alert('退出登录', '退出后本地数据不受影响，但云端同步将暂停。', [
+            { text: '取消', style: 'cancel' },
+            {
+                text: '确认退出',
+                style: 'destructive',
+                onPress: async () => {
+                    await supabase.auth.signOut();
+                    setSyncMsg(null);
+                },
+            },
+        ]);
+    };
+
     const handleSync = async () => {
         if (!isSupabaseConfigured()) {
             Alert.alert(
@@ -619,10 +704,44 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             {/* ── 云端同步 (Phase 7.2) ── */}
             <Text style={styles.sectionHeader}>云端同步</Text>
 
+            {/* 账号状态 / 登录入口 */}
+            {isSupabaseConfigured() && (
+                session ? (
+                    <View style={styles.authStatusCard}>
+                        <View style={styles.authStatusInfo}>
+                            <Text style={styles.authStatusTitle}>🟩 已登录</Text>
+                            <Text style={styles.authStatusEmail}>{session.user.email}</Text>
+                        </View>
+                        <TouchableOpacity
+                            style={styles.signOutBtn}
+                            onPress={handleSignOut}
+                            testID="btn-sign-out"
+                        >
+                            <Text style={styles.signOutBtnText}>退出登录</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <TouchableOpacity
+                        style={styles.exportCard}
+                        onPress={() => { setAuthError(null); setShowAuthModal(true); }}
+                        testID="btn-open-auth-modal"
+                    >
+                        <Text style={styles.exportIcon}>🔐</Text>
+                        <View style={styles.exportInfo}>
+                            <Text style={styles.exportTitle}>开启云同步 — 登录 / 注册</Text>
+                            <Text style={styles.exportDesc}>
+                                绑定账号后，数据将通过 Supabase 安全加密同步，RLS 保障仅限本人访问
+                            </Text>
+                        </View>
+                        <Text style={styles.exportArrow}>›</Text>
+                    </TouchableOpacity>
+                )
+            )}
+
             <TouchableOpacity
-                style={[styles.exportCard, syncing && styles.exportCardDisabled]}
+                style={[styles.exportCard, (syncing || !session) && styles.exportCardDisabled]}
                 onPress={handleSync}
-                disabled={anyBusy}
+                disabled={anyBusy || !session}
                 testID="btn-cloud-sync"
             >
                 <Text style={styles.exportIcon}>☁️</Text>
@@ -632,7 +751,9 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                     </Text>
                     <Text style={styles.exportDesc}>
                         {isSupabaseConfigured()
-                            ? '将本地数据双向同步至 Supabase 云端，彻底解决 iOS Safari 清缓存丢数据问题'
+                            ? (session
+                                ? '将本地数据双向同步至 Supabase 云端，彻底解决 iOS Safari 清缓存丢数据问题'
+                                : '请先登录账号再执行同步')
                             : '填入 supabaseClient.ts 中的 Project URL 与 Anon Key 后即可启用'}
                     </Text>
                     {syncMsg && (
@@ -648,8 +769,83 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                     ? (<><ActivityIndicator size="small" color={COLORS.primary} />
                         <Text style={styles.exportLoadingText}>同步中...</Text></>
                     )
-                    : <Text style={[styles.exportArrow, !isSupabaseConfigured() && styles.disabledText]}>›</Text>}
+                    : <Text style={[styles.exportArrow, (!isSupabaseConfigured() || !session) && styles.disabledText]}>›</Text>}
             </TouchableOpacity>
+
+            {/* Login / Register Modal */}
+            <Modal
+                visible={showAuthModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowAuthModal(false)}
+            >
+                <KeyboardAvoidingView
+                    style={styles.modalOverlay}
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                >
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>
+                            {authMode === 'signin' ? '登录云同步账号' : '注册新账号'}
+                        </Text>
+
+                        <TextInput
+                            style={styles.authInput}
+                            placeholder="邮箱地址"
+                            placeholderTextColor={COLORS.textSecondary}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            value={email}
+                            onChangeText={setEmail}
+                            testID="input-email"
+                        />
+                        <TextInput
+                            style={styles.authInput}
+                            placeholder="密码（至少 6 位）"
+                            placeholderTextColor={COLORS.textSecondary}
+                            secureTextEntry
+                            value={password}
+                            onChangeText={setPassword}
+                            testID="input-password"
+                        />
+
+                        {authError && (
+                            <Text style={styles.authErrorText}>{authError}</Text>
+                        )}
+
+                        <TouchableOpacity
+                            style={[styles.authPrimaryBtn, authLoading && styles.exportCardDisabled]}
+                            onPress={authMode === 'signin' ? handleSignIn : handleSignUp}
+                            disabled={authLoading}
+                            testID="btn-auth-submit"
+                        >
+                            {authLoading
+                                ? <ActivityIndicator size="small" color="#fff" />
+                                : <Text style={styles.authPrimaryBtnText}>
+                                    {authMode === 'signin' ? '登录' : '注册'}
+                                  </Text>
+                            }
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            onPress={() => { setAuthMode(m => m === 'signin' ? 'signup' : 'signin'); setAuthError(null); }}
+                            testID="btn-toggle-auth-mode"
+                        >
+                            <Text style={styles.authToggleText}>
+                                {authMode === 'signin' ? '没有账号？点此注册' : '已有账号？点此登录'}
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.modalCancelBtn}
+                            onPress={() => setShowAuthModal(false)}
+                            testID="btn-auth-cancel"
+                        >
+                            <Text style={styles.modalCancelText}>取消</Text>
+                        </TouchableOpacity>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
 
             {/* ── 关于 ── */}
             <Text style={styles.sectionHeader}>关于</Text>
@@ -762,6 +958,89 @@ const styles = StyleSheet.create({
         marginHorizontal: 8,
         opacity: 0.7,
     },
+
+    // ── Auth / Cloud Sync styles ───────────────────────────────────────────
+    authStatusCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#0A1A0F',
+        borderWidth: 1,
+        borderColor: COLORS.success,
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 10,
+    },
+    authStatusInfo: { flex: 1 },
+    authStatusTitle: { color: COLORS.success, fontSize: 14, fontWeight: '700' },
+    authStatusEmail: { color: COLORS.textSecondary, fontSize: 12, marginTop: 2 },
+    signOutBtn: {
+        backgroundColor: '#2A0E0E',
+        borderWidth: 1,
+        borderColor: COLORS.error,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+    },
+    signOutBtnText: { color: COLORS.error, fontSize: 12, fontWeight: '600' },
+
+    // Auth Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.75)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    modalCard: {
+        width: '100%',
+        maxWidth: 400,
+        backgroundColor: '#1F2937',
+        borderRadius: 20,
+        padding: 24,
+        borderWidth: 1,
+        borderColor: '#374151',
+    },
+    modalTitle: {
+        color: COLORS.text,
+        fontSize: 18,
+        fontWeight: '700',
+        textAlign: 'center',
+        marginBottom: 20,
+    },
+    authInput: {
+        backgroundColor: '#111827',
+        borderWidth: 1,
+        borderColor: '#374151',
+        borderRadius: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        color: COLORS.text,
+        fontSize: 15,
+        marginBottom: 12,
+    },
+    authErrorText: {
+        color: COLORS.error,
+        fontSize: 13,
+        marginBottom: 10,
+        textAlign: 'center',
+    },
+    authPrimaryBtn: {
+        backgroundColor: COLORS.primary,
+        borderRadius: 12,
+        paddingVertical: 14,
+        alignItems: 'center',
+        marginTop: 4,
+        marginBottom: 12,
+    },
+    authPrimaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+    authToggleText: {
+        color: COLORS.accent,
+        fontSize: 13,
+        textAlign: 'center',
+        marginBottom: 16,
+    },
+    modalCancelBtn: { alignItems: 'center', paddingTop: 4 },
+    modalCancelText: { color: COLORS.textSecondary, fontSize: 14 },
 });
 
 export default SettingsScreen;

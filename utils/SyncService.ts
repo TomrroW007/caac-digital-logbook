@@ -159,3 +159,30 @@ export const syncWithCloud = async (): Promise<SyncStatus> => {
         return errStatus;
     }
 };
+
+// ─── Auth State Subscription ──────────────────────────────────────────────────
+
+/**
+ * 订阅 Supabase 鉴权状态变化。
+ *
+ * - 用户登出时自动将同步状态重置为 `{ state: 'local' }`。
+ * - 回调接收最新的 Session（或 null 表示已退出）。
+ * - 返回取消订阅函数，组件卸载时调用。
+ *
+ * @example
+ * useEffect(() => {
+ *   const unsubscribe = subscribeToAuthChanges(session => setSession(session));
+ *   return unsubscribe;
+ * }, []);
+ */
+export const subscribeToAuthChanges = (
+    onAuthChange: (session: import('@supabase/supabase-js').Session | null) => void,
+): (() => void) => {
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (!session) {
+            writeSyncStatus({ state: 'local' });
+        }
+        onAuthChange(session);
+    });
+    return () => data.subscription.unsubscribe();
+};
