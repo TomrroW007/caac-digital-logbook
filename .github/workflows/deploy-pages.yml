@@ -1,48 +1,83 @@
-name: Deploy Web To Cloudflare Pages
+name: Deploy Web & Worker
 
 on:
   push:
     branches:
       - main
       - release/pre-launch-deployment
-  workflow_dispatch:
-
-concurrency:
-  group: deploy-pages-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
-  deploy:
-    name: Build And Deploy
+  deploy_staging:
+    name: Deploy to Staging
+    if: github.ref == 'refs/heads/release/pre-launch-deployment'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
+      - run: npm ci
 
-      - name: Install dependencies
-        run: npm ci
+      # 部署 Worker 到 Staging
+      - name: Deploy Worker (Staging)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: 'worker'
+          command: deploy --env staging
 
-      - name: Build web bundle
+      # 编译前端 Web，注入 Staging 的后端 URL
+      - name: Build Web (Staging)
         run: npm run build:web
-
-      - name: Ensure Cloudflare Pages project exists
-        run: |
-          npx wrangler@4.70.0 pages project create caac-digital-logbook --production-branch main || echo "Project already exists, continue deploy."
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPO_PUBLIC_WORKER_URL: https://caac-logbook-worker-staging.caac-logbook.workers.dev
 
-      - name: Deploy to Cloudflare Pages
-        run: npx wrangler@4.70.0 pages deploy dist --project-name caac-digital-logbook --branch ${{ github.ref_name }}
+      # 部署前端到 Cloudflare Pages (非 main 分支会被视为 Preview 环境)
+      - name: Deploy Pages (Staging)
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: 'caac-digital-logbook'
+          directory: 'dist'
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy_production:
+    name: Deploy to Production
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+
+      # 部署 Worker 到 Production
+      - name: Deploy Worker (Production)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: 'worker'
+          command: deploy
+
+      # 编译前端 Web，你的 package.json 中配置了 build:web 指令
+      - name: Build Web (Production)
+        run: npm run build:web
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPO_PUBLIC_WORKER_URL: https://caac-logbook-worker.caac-logbook.workers.dev
+
+      # 部署前端到 Cloudflare Pages 的生产环境
+      - name: Deploy Pages (Production)
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: 'caac-digital-logbook'
+          directory: 'dist'
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
