@@ -4,7 +4,7 @@
 
 | 项目 | 状态 | 说明 |
 |------|------|------|
-| **生产域名** | ✅ | `https://flight-proxy.caac-logbook.workers.dev` |
+| **生产域名** | ✅ | `https://caac-logbook-worker.caac-logbook.workers.dev` |
 | **API 密钥** | ✅ | AviationStack + AirLabs 已安全注入 |
 | **四级瀑布流** | ✅ | KV 缓存 → AviationStack → 数据缼合 → 静默降级 |
 | **数据缼合优化** | ✅ | 当 AviationStack 缺机型/注册号时，自动调用 AirLabs 补全 |
@@ -19,10 +19,10 @@
 
 ```bash
 # 标准 IATA 航班号
-curl "https://flight-proxy.caac-logbook.workers.dev/api/flight?no=CA1501&date=2026-03-05"
+curl "https://caac-logbook-worker.caac-logbook.workers.dev/api/flight?no=CA1501&date=2026-03-05"
 
 # ICAO 三字母代码
-curl "https://flight-proxy.caac-logbook.workers.dev/api/flight?no=CCA1501&date=2026-03-05"
+curl "https://caac-logbook-worker.caac-logbook.workers.dev/api/flight?no=CCA1501&date=2026-03-05"
 
 # 返回示例
 {
@@ -37,7 +37,7 @@ curl "https://flight-proxy.caac-logbook.workers.dev/api/flight?no=CCA1501&date=2
 
 ```typescript
 // utils/ApiService.ts
-const WORKER_URL = 'https://flight-proxy.caac-logbook.workers.dev';
+const WORKER_URL = 'https://caac-logbook-worker.caac-logbook.workers.dev';
 
 const flightNo = 'CA1501';
 const date = '2026-03-05';
@@ -177,7 +177,7 @@ if (data.error === 'NOT_FOUND') {
 
 1. **环境变量更新**
    ```typescript
-   const WORKER_URL = 'https://flight-proxy.caac-logbook.workers.dev';
+  const WORKER_URL = 'https://caac-logbook-worker.caac-logbook.workers.dev';
    ```
 
 2. **错误处理优化**
@@ -221,7 +221,7 @@ if (data.error === 'NOT_FOUND') {
 
 ## 📞 支持与反馈
 
-- **生产域名**：https://flight-proxy.caac-logbook.workers.dev
+- **生产域名**：https://caac-logbook-worker.caac-logbook.workers.dev
 - **问题反馈**：检查 Cloudflare Dashboard → Analytics
 - **性能优化**：监控 `X-Source` 分布，评估缼合效果
 - **升级建议**：考虑 AviationStack Basic Plan ($14.99/月) 以支持完整历史查询
