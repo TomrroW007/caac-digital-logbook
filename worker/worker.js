@@ -86,10 +86,10 @@ async function tryAviationStack(flightNo, isIcao, apiKey) {
 
         const f = payload.data[0];
         return {
-            dep_icao:      f.departure?.icao        ?? null,
-            arr_icao:      f.arrival?.icao          ?? null,
+            dep_icao: f.departure?.icao ?? null,
+            arr_icao: f.arrival?.icao ?? null,
             aircraft_icao: f.aircraft?.icao ?? f.aircraft?.iata ?? null,
-            reg_number:    f.aircraft?.registration ?? null,
+            reg_number: f.aircraft?.registration ?? null,
         };
     } catch {
         return null; // 超时或网络异常
@@ -122,10 +122,10 @@ async function tryAirLabs(flightNo, isIcao, apiKey) {
 
         const f = payload.response[0];
         return {
-            dep_icao:      f.dep_icao  ?? null,
-            arr_icao:      f.arr_icao  ?? null,
+            dep_icao: f.dep_icao ?? null,
+            arr_icao: f.arr_icao ?? null,
             aircraft_icao: f.aircraft_icao ?? null,
-            reg_number:    f.reg_number ?? null,
+            reg_number: f.reg_number ?? null,
         };
     } catch {
         return null; // 超时或网络异常
@@ -147,7 +147,7 @@ export default {
             return json({ error: 'NOT_FOUND' });
         }
 
-        const flightNo   = (url.searchParams.get('no')   ?? '').trim().toUpperCase();
+        const flightNo = (url.searchParams.get('no') ?? '').trim().toUpperCase();
         const flightDate = (url.searchParams.get('date') ?? '').trim();
 
         // 基础参数校验：航班号 + YYYY-MM-DD 日期均必填
@@ -158,7 +158,7 @@ export default {
         // ── 智能识别：ICAO（3 字母，如 CCA1501）或 IATA（2 字母，如 CA1501）──
         // 使用正则匹配，避免旧版 slice(0,2) 导致的 CCA→CC 严重错误
         const cleanedNo = flightNo.replace(/\s+/g, '');
-        const isIcao    = /^[A-Z]{3}\d/.test(cleanedNo);
+        const isIcao = /^[A-Z]{3}\d/.test(cleanedNo);
 
         // ═══════════════════════════════════════════════════════════════════════
         // Tier 1: KV 缓存拦截（极速路径，命中率 > 90%）
