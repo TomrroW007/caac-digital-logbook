@@ -1,17 +1,19 @@
-name = "flight-proxy"
+name = "caac-logbook-worker"
 main = "worker.js"
-compatibility_date = "2026-03-05"
+compatibility_date = "2024-03-01"
 
-[vars]
-# ── API Keys ─────────────────────────────────────────────────────────────────
-# 生产环境密钥通过 Cloudflare Dashboard 或 CLI 注入，不得明文写入此文件：
-#   wrangler secret put AVIATIONSTACK_API_KEY
-#   wrangler secret put AIRLABS_API_KEY
-#
-# 本地开发密钥配置：创建 worker/.dev.vars 文件（已加入 .gitignore）：
-#   AVIATIONSTACK_API_KEY=your_aviationstack_key_here
-#   AIRLABS_API_KEY=your_airlabs_key_here
+# ==========================================================
+# 🚀 生产环境 (Production)
+# ==========================================================
+kv_namespaces = [
+	{ binding = "FLIGHT_CACHE", id = "372feeb0a41f45b5a47935c0cf71c800" }
+]
 
-[[kv_namespaces]]
-binding = "FLIGHT_CACHE"
-id = "372feeb0a41f45b5a47935c0cf71c800"
+# ==========================================================
+# 🧪 预发布环境 (Staging)
+# ==========================================================
+[env.staging]
+name = "caac-logbook-worker-staging"
+kv_namespaces = [
+	{ binding = "FLIGHT_CACHE", id = "2fc9a28ddf304796bc20afcdb21ed3ce" }
+]

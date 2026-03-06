@@ -22,6 +22,7 @@ import {
 
 import MaskedTimeInput from '../shared/MaskedTimeInput';
 import { OptionPicker } from '../shared/OptionPicker';
+import { SmartDatePicker } from '../shared/SmartDatePicker';
 import { resolveFourTimePoints } from '../../utils/FlightMath';
 import { validateFlightRecord, type FlightRecordInput } from '../../utils/ComplianceValidator';
 import { lookupAirportOffset, isDstObservingRegion } from '../../data/airportTimezones';
@@ -577,14 +578,14 @@ export const DualTrackForm: React.FC<Props> = ({
                     </View>
                     <View style={styles.gap} />
                     <View style={styles.flexField}>
-                        <Text style={styles.inputLabel}>实际日期 Actl Date *</Text>
-                        <TextInput
-                            style={[styles.textInput, fieldError('actl_date') && styles.inputError]}
+                        <Text style={styles.inputLabel}>
+                            实际日期 Actl Date *{'  '}
+                            <Text style={styles.dateEchoText}>{shared.actlDate}</Text>
+                        </Text>
+                        <SmartDatePicker
                             value={shared.actlDate}
-                            onChangeText={v => updateShared({ actlDate: v })}
-                            placeholder="YYYY-MM-DD"
-                            placeholderTextColor={COLORS.placeholder}
-                            testID="input-actl-date"
+                            onChange={v => updateShared({ actlDate: v })}
+                            hasError={!!fieldError('actl_date')}
                         />
                     </View>
                 </View>
@@ -1412,6 +1413,11 @@ const styles = StyleSheet.create({
         fontSize: 11,
         marginBottom: 4,
         fontWeight: '500',
+    },
+    dateEchoText: {
+        color: COLORS.primary,
+        fontWeight: 'bold',
+        fontVariant: ['tabular-nums'],
     },
     textInput: {
         backgroundColor: COLORS.background,

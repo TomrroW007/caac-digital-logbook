@@ -42,10 +42,45 @@ npx jest --verbose
 
 # 部署 Cloudflare Worker（可选）
 cd worker
-npx wrangler kv:namespace create "FLIGHT_CACHE"
-npx wrangler secret put AIRLABS_KEY
+
+# Wrangler v4 KV 命令语法（若 namespace 已存在会报已存在，可直接跳过）
+npx wrangler kv namespace create "FLIGHT_CACHE"
+npx wrangler kv namespace create "FLIGHT_CACHE" --env staging
+
+# 注入生产环境 Secrets
+npx wrangler secret put AVIATIONSTACK_KEY --env=""
+npx wrangler secret put AIRLABS_KEY --env=""
+
+# 注入预发布环境 Secrets（不要漏）
+npx wrangler secret put AVIATIONSTACK_KEY --env staging
+npx wrangler secret put AIRLABS_KEY --env staging
+
+# 部署预发布环境（release/pre-launch-deployment 分支）
+npx wrangler deploy --env staging
+
+# 部署生产环境（main 分支）
 npx wrangler deploy
 ```
+
+Worker 域名约定：
+- Staging: `https://caac-logbook-worker-staging.<your-subdomain>.workers.dev`
+- Production: `https://caac-logbook-worker.<your-subdomain>.workers.dev`
+
+## 🔁 GitHub 持续部署（Cloudflare Pages）
+
+本仓库已添加自动发布工作流：`.github/workflows/deploy-pages.yml`
+
+触发规则：
+- 推送到 `main` 分支时自动构建并发布 Web 站点。
+- 也可在 GitHub Actions 页面手动执行 `workflow_dispatch`。
+
+你只需在 GitHub 仓库 `Settings > Secrets and variables > Actions` 新增：
+- `CLOUDFLARE_API_TOKEN`：Cloudflare API Token（至少包含 Pages 编辑权限）。
+- `CLOUDFLARE_ACCOUNT_ID`：Cloudflare 账户 ID。
+
+部署目标：
+- Project Name: `caac-digital-logbook`
+- Public URL: `https://caac-digital-logbook.pages.dev`
 
 ## 📂 项目结构
 
