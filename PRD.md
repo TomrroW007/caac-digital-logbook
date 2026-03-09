@@ -1,10 +1,20 @@
 
-# ✈️ 民航飞行员专属 LOGBOOK 产品需求文档 (PRD) V1.3 Phase 6 更新版
+# ✈️ 民航飞行员专属 LOGBOOK 产品需求文档 (PRD) V1.4 Phase 8 更新版
 
-**文档状态**：已冻结 (Frozen) - V1.3 同步 Phase 6 云端代理层实施细节  
+**文档状态**：已冻结 (Frozen) - V1.4 同步 Phase 8 极速录入与多维导出重构实施细节  
 **目标受众**：全栈独立开发者 (Solo Developer)  
 **合规基准**：严格遵循 CCAR-61部、CCAR-121部 及 ICAO 附件1  
 **核心原则**：离线绝对优先、全量 LT 极简录入、分钟制整数存储、动态双轨表单、双格式合规导出
+
+### 📝 V1.4 Phase 8 更新记录 (极速录入 & 多维导出重构)
+
+14. **航班号提权到第一行**：将 航班号 (Flt No.) 移至基本信息卡片首行，与实际日期 (Actl Date) 并排。确保 API 自动填充在表单最早阶段被触发。
+15. **时刻与运行数据卡片合并**：将原「时刻（当地时间 LT）」、「起飞/着陆次数」、「特殊时间 Special Times」三个独立卡片合并为单一「时刻与运行数据 Time & Operations」卡片。
+16. **空中时间 (Air Time) 自动推算**：时刻失焦后复用 `calcFlightTimeMin(toUtcISO, ldgUtcISO)` 引擎计算空中时间，与 Block Time 并列显示。TO/LDG 任一则显示 --:--。
+17. **PF/PM 起落自动联动**：搏操角色选择 PF 后，系统依据 `isNightHintTime(LDG/ON)` 自动推算并写入 1 次昼间或夜间起落；选择 PM 则起落次数全非零。代码实现层 `isManualLandings` 开关允许手动覆盖，关闭手动模式后自动重置。**作用域限制：仅在 FLIGHT 模式下生效，不涉及 SIMULATOR。**
+18. **导出记录类型过滤**：Settings 页面新安 分段控制器，允许按 [ 全部 ] [ 真实飞行 ] [ 模拟机 ] 三种类型过滤导出。
+19. **导出时区报表**：支持 [ 北京时间 LT (UTC+8) ] 和 [ UTC ] 两种时标导出。LT_BEIJING 采用 `getTime() + 8*3600*1000` + `getUTCHours()` 方案，噀擦设备本地时区干扰，永远与设备所在地区无关。PDF 表鍏头动态展示 LT/UTC 标期。
+20. **版本升级**：应用版本号升级至 1.4.0 (Phase 8)。
 
 ### 📝 V1.3 Phase 6 更新记录 (Cloud Proxy & Auto-fill)
 

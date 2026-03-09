@@ -113,7 +113,7 @@ const signatureBar = () => `
     <div class="sig-box">审查员签字 Inspector Signature ______</div>
   </div>`;
 
-function generateLogbookHtml(records: LogbookRecord[]): string {
+function generateLogbookHtml(records: LogbookRecord[], timezone: 'LT_BEIJING' | 'UTC'): string {
     // Chunk records into pages of ROWS_PER_PAGE
     const pages: LogbookRecord[][] = [];
     for (let i = 0; i < records.length; i += ROWS_PER_PAGE) {
@@ -127,7 +127,7 @@ function generateLogbookHtml(records: LogbookRecord[]): string {
       <tr>
         <th>计划日期</th><th>实际日期</th><th>航空器型别</th><th>航空器登记号</th>
         <th>航段 Route</th>
-        <th>OFF UTC</th><th>TO UTC</th><th>LDG UTC</th><th>ON UTC</th>
+        <th>OFF ${timezone === 'LT_BEIJING' ? 'LT' : 'UTC'}</th><th>TO ${timezone === 'LT_BEIJING' ? 'LT' : 'UTC'}</th><th>LDG ${timezone === 'LT_BEIJING' ? 'LT' : 'UTC'}</th><th>ON ${timezone === 'LT_BEIJING' ? 'LT' : 'UTC'}</th>
         <th>飞行时间 Total</th><th>PIC</th><th>PIC U/S</th><th>SPIC</th><th>SIC</th><th>带飞</th><th>教员</th>
         <th>夜航</th><th>仪表</th>
         <th>昼间起降</th><th>夜间起降</th>
@@ -150,10 +150,10 @@ function generateLogbookHtml(records: LogbookRecord[]): string {
       <td>${r.acftType}</td>
       <td>${r.regNo ?? ''}</td>
       <td>${isFlight ? (r.routeString || '—') : ''}</td>
-      <td>${r.offTimeUtc ? r.offTimeUtc.slice(11, 16) : ''}</td>
-      <td>${r.toTimeUtc ? r.toTimeUtc.slice(11, 16) : ''}</td>
-      <td>${r.ldgTimeUtc ? r.ldgTimeUtc.slice(11, 16) : ''}</td>
-      <td>${r.onTimeUtc ? r.onTimeUtc.slice(11, 16) : ''}</td>
+      <td>${fmtTime(r.offTimeUtc, timezone)}</td>
+      <td>${fmtTime(r.toTimeUtc, timezone)}</td>
+      <td>${fmtTime(r.ldgTimeUtc, timezone)}</td>
+      <td>${fmtTime(r.onTimeUtc, timezone)}</td>
       <td>${isFlight ? minutesToHHMM(r.blockTimeMin) : ''}</td>
       <td>${minutesToHHMM(r.picMin)}</td>
       <td>${r.safePicUsMin > 0 ? minutesToHHMM(r.safePicUsMin) : ''}</td>
@@ -228,7 +228,8 @@ function generateLogbookHtml(records: LogbookRecord[]): string {
 
 // ─── Excel Row Mapper ─────────────────────────────────────────────────────────
 
-function recordsToXlsxRows(records: LogbookRecord[]) {
+function recordsToXlsxRows(records: LogbookRecord[], timezone: 'LT_BEIJING' | 'UTC') {
+    const tzLabel = timezone === 'LT_BEIJING' ? 'LT' : 'UTC';
     return records.map(r => ({
         '计划日期': r.schdDate,
         '实际日期': r.actlDate,
@@ -236,10 +237,10 @@ function recordsToXlsxRows(records: LogbookRecord[]) {
         '航空器登记号': r.regNo ?? '',
         '航段/SIM': r.dutyType === 'FLIGHT' ? r.routeString : (r.simNo ?? ''),
         '航班号': r.flightNo ?? '',
-        'OFF(UTC)': r.offTimeUtc,
-        'TO(UTC)': r.toTimeUtc ?? '',
-        'LDG(UTC)': r.ldgTimeUtc ?? '',
-        'ON(UTC)': r.onTimeUtc,
+        [`OFF(${tzLabel})`]: fmtTime(r.offTimeUtc, timezone),
+        [`TO(${tzLabel})`]: fmtTime(r.toTimeUtc, timezone),
+        [`LDG(${tzLabel})`]: fmtTime(r.ldgTimeUtc, timezone),
+        [`ON(${tzLabel})`]: fmtTime(r.onTimeUtc, timezone),
         'Block(min)': r.blockTimeMin,
         'PIC(min)': r.picMin,
         'PIC U/S(min)': r.safePicUsMin,
@@ -287,16 +288,20 @@ const COLORS = {
 const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
     const [exportingPdf, setExportingPdf] = useState(false);
     const [exportingExcel, setExportingExcel] = useState(false);
+    // ── Phase 8: Export filter states ────────────────────────────────────────
+    const [exportRecordType, setExportRecordType] = useState<'ALL' | 'FLIGHT' | 'SIMULATOR'>('ALL');
+    const [exportTimezone, setExportTimezone] = useState<'LT_BEIJING' | 'UTC'>('LT_BEIJING');
 
-    // ── PDF Export ───────────────────────────────────────────────────────────
+    // ── PDF Export ──────────────────────────────────────────────────
     const handlePdfExport = async () => {
-        if (logbooks.length === 0) {
-            Alert.alert('无记录', '暂无可导出的飞行记录。');
+        const filteredRecords = prepareExportData(logbooks, exportRecordType);
+        if (filteredRecords.length === 0) {
+            Alert.alert('无记录', '暂无可导出的飞行记录（请检查过滤条件）。');
             return;
         }
         setExportingPdf(true);
         try {
-            const html = generateLogbookHtml(logbooks);
+            const html = generateLogbookHtml(filteredRecords, exportTimezone);
 
             if (Platform.OS === 'web') {
                 // Web: open a new window with the raw HTML, then print
@@ -335,13 +340,14 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
     // ── Excel Export ─────────────────────────────────────────────────────────
     const handleExcelExport = async () => {
-        if (logbooks.length === 0) {
-            Alert.alert('无记录', '暂无可导出的飞行记录。');
+        const filteredRecords = prepareExportData(logbooks, exportRecordType);
+        if (filteredRecords.length === 0) {
+            Alert.alert('无记录', '暂无可导出的飞行记录（请检查过滤条件）。');
             return;
         }
         setExportingExcel(true);
         try {
-            const rows = recordsToXlsxRows(logbooks);
+            const rows = recordsToXlsxRows(filteredRecords, exportTimezone);
             const ws = XLSX.utils.json_to_sheet(rows);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Logbook');
@@ -379,6 +385,47 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
 
+            {/* ── Phase 8: Export Filter Card (Segmented Controls) ── */}
+            <Text style={styles.sectionHeader}>导出设置 Export Settings</Text>
+            <View style={styles.filterCard}>
+                <Text style={styles.filterLabel}>记录类型 Record Type</Text>
+                <View style={styles.segmentedRow}>
+                    {(['ALL', 'FLIGHT', 'SIMULATOR'] as const).map(type => (
+                        <TouchableOpacity
+                            key={type}
+                            style={[styles.segBtn, exportRecordType === type && styles.segBtnActive]}
+                            onPress={() => setExportRecordType(type)}
+                            testID={`filter-type-${type.toLowerCase()}`}
+                        >
+                            <Text style={[styles.segBtnText, exportRecordType === type && styles.segBtnTextActive]}>
+                                {type === 'ALL' ? '全部' : type === 'FLIGHT' ? '真实飞行' : '模拟机'}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
+                <Text style={[styles.filterLabel, { marginTop: 12 }]}>时间标准 Timezone</Text>
+                <View style={styles.segmentedRow}>
+                    {(['LT_BEIJING', 'UTC'] as const).map(tz => (
+                        <TouchableOpacity
+                            key={tz}
+                            style={[styles.segBtn, exportTimezone === tz && styles.segBtnActive]}
+                            onPress={() => setExportTimezone(tz)}
+                            testID={`filter-tz-${tz.toLowerCase()}`}
+                        >
+                            <Text style={[styles.segBtnText, exportTimezone === tz && styles.segBtnTextActive]}>
+                                {tz === 'LT_BEIJING' ? '北京时间 LT' : 'UTC'}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
+                <Text style={styles.filterCount}>
+                    已筛选 {prepareExportData(logbooks, exportRecordType).length} 条记录 ·
+                    {exportTimezone === 'LT_BEIJING' ? ' 展示北京时间 (UTC+8)' : ' 展示 UTC 时间'}
+                </Text>
+            </View>
+
             <Text style={styles.sectionHeader}>导出选项</Text>
 
             {/* PDF Export */}
@@ -395,7 +442,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                         符合 CCAR-61 部标准，含教员签字栏，可直接打印提交局方审查
                     </Text>
                     <Text style={styles.exportCount}>
-                        {logbooks.length} 条记录 · A4 横向
+                        {prepareExportData(logbooks, exportRecordType).length} 条记录 · A4 横向
                     </Text>
                 </View>
                 {exportingPdf
@@ -422,7 +469,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                         供个人数据备份与电脑端二次分析，格式兼容 WPS / Microsoft Excel
                     </Text>
                     <Text style={styles.exportCount}>
-                        {logbooks.length} 条记录 · .xlsx 格式
+                        {prepareExportData(logbooks, exportRecordType).length} 条记录 · .xlsx 格式
                     </Text>
                 </View>
                 {exportingExcel
@@ -439,7 +486,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>版本</Text>
-                <Text style={styles.infoValue}>1.0.0</Text>
+                <Text style={styles.infoValue}>1.4.0 (Phase 8)</Text>
             </View>
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>合规标准</Text>
@@ -525,6 +572,56 @@ const styles = StyleSheet.create({
         color: COLORS.textSecondary,
         fontSize: 11,
         marginLeft: 8,
+    },
+
+    // ── Phase 8: Export filter card & segmented controls ────────────────────────
+    filterCard: {
+        backgroundColor: COLORS.card,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 12,
+    },
+    filterLabel: {
+        color: COLORS.textSecondary,
+        fontSize: 11,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.8,
+        marginBottom: 8,
+    },
+    segmentedRow: {
+        flexDirection: 'row',
+        gap: 6,
+    },
+    segBtn: {
+        flex: 1,
+        paddingVertical: 8,
+        alignItems: 'center',
+        borderRadius: 8,
+        borderWidth: 1.5,
+        borderColor: COLORS.border,
+        backgroundColor: COLORS.background,
+    },
+    segBtnActive: {
+        borderColor: COLORS.primary,
+        backgroundColor: '#1E3A5F',
+    },
+    segBtnText: {
+        color: COLORS.textSecondary,
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    segBtnTextActive: {
+        color: '#DBEAFE',
+    },
+    filterCount: {
+        color: COLORS.accent,
+        fontSize: 11,
+        marginTop: 10,
+        fontWeight: '500',
+        textAlign: 'center',
     },
 
     // Offline privacy disclaimer (bottom of 关于 section)
