@@ -23,7 +23,7 @@ import {
 import MaskedTimeInput from '../shared/MaskedTimeInput';
 import { OptionPicker } from '../shared/OptionPicker';
 import { SmartDatePicker } from '../shared/SmartDatePicker';
-import { resolveFourTimePoints } from '../../utils/FlightMath';
+import { resolveFourTimePoints, calcFlightTimeMin } from '../../utils/FlightMath';
 import { validateFlightRecord, type FlightRecordInput } from '../../utils/ComplianceValidator';
 import { lookupAirportOffset, isDstObservingRegion } from '../../data/airportTimezones';
 import { localTimeToUtcISO, isNightHintTime } from '../../utils/TimeCalculator';
@@ -81,6 +81,27 @@ type SharedFields = {
 };
 
 // ─── Domain Enum Constants ────────────────────────────────────────────────────
+
+// ─── Aircraft Type Presets (CCAR-61 Chinese commercial aviation + 巴航工业) ─────
+export type PresetCategory = {
+    label: string;
+    items: string[];
+};
+
+const ACFT_TYPE_CATEGORIES: PresetCategory[] = [
+    {
+        label: '空客 Airbus',
+        items: ['A319', 'A320', 'A321', 'A321NEO', 'A330-200', 'A330-300', 'A350-900', 'A380']
+    },
+    {
+        label: '波音 Boeing',
+        items: ['B737-800', 'B737MAX8', 'B777-200', 'B777-300ER', 'B787-9']
+    },
+    {
+        label: '其他 Others',
+        items: ['C919', 'ARJ21', 'E175', 'E190', 'E195', 'ATR72', 'CRJ900']
+    }
+];
 
 const APPROACH_TYPE_OPTIONS = [
     { label: 'ILS CAT I', value: 'ILS CAT I' },
@@ -249,6 +270,10 @@ export const DualTrackForm: React.FC<Props> = ({
     const [blockTimeMin, setBlockTimeMin] = useState<number | null>(
         existingRecord?.blockTimeMin ?? null
     );
+    // Computed air time (TO → LDG, cross-midnight safe) — null until both TO and LDG are present
+    const [airTimeMin, setAirTimeMin] = useState<number | null>(null);
+    // Whether pilot is manually overriding the auto-computed landing counts
+    const [isManualLandings, setIsManualLandings] = useState(false);
     // Field-level validation errors
     const [errors, setErrors] = useState<Record<string, string>>({});
     // Whether save was attempted (enables error display)
@@ -263,9 +288,13 @@ export const DualTrackForm: React.FC<Props> = ({
         if (next === 'SIMULATOR') {
             setFlight(EMPTY_FLIGHT); // EMPTY_FLIGHT.dayTo = 0, .nightTo = 0
             setBlockTimeMin(null);
+            setAirTimeMin(null);
+            setIsManualLandings(false);
         } else {
             setSim(EMPTY_SIM);
             setBlockTimeMin(null);
+            setAirTimeMin(null);
+            setIsManualLandings(false);
         }
         setErrors({});
         setSubmitted(false);
@@ -295,6 +324,16 @@ export const DualTrackForm: React.FC<Props> = ({
         const onUtcISO = flight.onRaw.length === 4
             ? localTimeToUtcISO(aDate, flight.onRaw, arrOffsetOverride)
             : null;
+
+        // Air time: always recompute from TO+LDG whenever either changes.
+        // calcFlightTimeMin handles cross-midnight correctly (via Phase 2 engine).
+        // Stays null (shows --:--) until both TO and LDG are present — QA air-time空值测试.
+        if (toUtcISO && ldgUtcISO) {
+            try { setAirTimeMin(calcFlightTimeMin(toUtcISO, ldgUtcISO)); }
+            catch { setAirTimeMin(null); }
+        } else {
+            setAirTimeMin(null);
+        }
 
         const canResolve =
             (offUtcISO && onUtcISO) ||
@@ -399,7 +438,7 @@ export const DualTrackForm: React.FC<Props> = ({
             flightNo: dutyType === 'FLIGHT' ? (flight.flightNo || null) : null,
             depIcao: dutyType === 'FLIGHT' ? (flight.depIcao || null) : null,
             arrIcao: dutyType === 'FLIGHT' ? (flight.arrIcao || null) : null,
-            regNo: shared.regNo || null,
+            regNo: dutyType === 'FLIGHT' ? (shared.regNo || null) : null,
             toUtcISO: dutyType === 'FLIGHT' ? toUtcISO : null,
             ldgUtcISO: dutyType === 'FLIGHT' ? ldgUtcISO : null,
             approachType: dutyType === 'FLIGHT' ? (flight.approachType || null) : null,
@@ -467,6 +506,29 @@ export const DualTrackForm: React.FC<Props> = ({
             abortRef.current?.abort();
         };
     }, []);
+
+    // ── PF/PM Auto-Landing Linkage (Phase 8) ─────────────────────────────────
+    // When PF is selected, auto-computes 1 day or night takeoff+landing based on
+    // isNightHintTime(LDG/ON). When isManualLandings switches back to false, the
+    // effect fires again and resets the counters (handles 状态回滚 QA test case).
+    // SCOPE GUARD: must NOT run in SIMULATOR mode — sim takeoffs don't count.
+    useEffect(() => {
+        if (dutyType !== 'FLIGHT') return;
+        if (isManualLandings) return;
+        const isNight = isNightHintTime(flight.ldgRaw) || isNightHintTime(flight.onRaw);
+        if (flight.pilotRole === 'PF') {
+            setFlight(prev => ({
+                ...prev,
+                dayTo: isNight ? 0 : 1,
+                nightTo: isNight ? 1 : 0,
+                dayLdg: isNight ? 0 : 1,
+                nightLdg: isNight ? 1 : 0,
+            }));
+        } else if (flight.pilotRole === 'PM') {
+            setFlight(prev => ({ ...prev, dayTo: 0, nightTo: 0, dayLdg: 0, nightLdg: 0 }));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [flight.pilotRole, flight.ldgRaw, flight.onRaw, isManualLandings, dutyType]);
 
     const handleFlightNoBlur = useCallback(async () => {
         // ── Clean flight number in UI (QA: "mu 5428" → "MU5428") ─────────
@@ -564,6 +626,7 @@ export const DualTrackForm: React.FC<Props> = ({
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>基本信息</Text>
 
+                {/* Row 1: Dates + Flight No (FLIGHT only — placed here to trigger API early) */}
                 <View style={styles.row}>
                     <View style={styles.flexField}>
                         <Text style={styles.inputLabel}>计划日期 Schd Date</Text>
@@ -588,34 +651,69 @@ export const DualTrackForm: React.FC<Props> = ({
                             hasError={!!fieldError('actl_date')}
                         />
                     </View>
+                    {dutyType === 'FLIGHT' && (
+                        <>
+                            <View style={styles.gap} />
+                            <View style={styles.flexField}>
+                                <Text style={styles.inputLabel}>航班号 Flt No.</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <TextInput
+                                        style={[styles.textInput, { flex: 1 }]}
+                                        value={flight.flightNo}
+                                        onChangeText={v => updateFlight({ flightNo: v.toUpperCase() })}
+                                        onBlur={handleFlightNoBlur}
+                                        placeholder="CA1501"
+                                        placeholderTextColor={COLORS.placeholder}
+                                        autoCapitalize="characters"
+                                        testID="input-flight-no"
+                                    />
+                                    {fetchingFlight && (
+                                        <ActivityIndicator
+                                            size="small"
+                                            color={COLORS.placeholder}
+                                            style={{ marginLeft: 6 }}
+                                        />
+                                    )}
+                                    {fetchSuccess && (
+                                        <Text style={{ marginLeft: 6, fontSize: 16 }}>✨</Text>
+                                    )}
+                                </View>
+                            </View>
+                        </>
+                    )}
                 </View>
 
                 <View style={styles.row}>
                     <View style={styles.flexField}>
-                        <Text style={styles.inputLabel}>机型 A/C Type *</Text>
-                        <TextInput
-                            style={[styles.textInput, fieldError('acft_type') && styles.inputError]}
+                        <Text style={[styles.inputLabel, fieldError('acft_type') && { color: COLORS.error }]}>
+                            机型 A/C Type *
+                        </Text>
+                        <ComboInput
                             value={shared.acftType}
-                            onChangeText={v => updateShared({ acftType: v.toUpperCase() })}
+                            onChange={v => updateShared({ acftType: v })}
+                            categorizedPresets={ACFT_TYPE_CATEGORIES}
                             placeholder="A320"
-                            placeholderTextColor={COLORS.placeholder}
-                            autoCapitalize="characters"
+                            hasError={!!fieldError('acft_type')}
                             testID="input-acft-type"
                         />
                     </View>
-                    <View style={styles.gap} />
-                    <View style={styles.flexField}>
-                        <Text style={styles.inputLabel}>登记号 Reg No.</Text>
-                        <TextInput
-                            style={styles.textInput}
-                            value={shared.regNo}
-                            onChangeText={v => updateShared({ regNo: v.toUpperCase() })}
-                            placeholder="B-6120"
-                            placeholderTextColor={COLORS.placeholder}
-                            autoCapitalize="characters"
-                            testID="input-reg-no"
-                        />
-                    </View>
+                    {dutyType === 'FLIGHT' && (
+                        <>
+                            <View style={styles.gap} />
+                            <View style={styles.flexField}>
+                                <Text style={styles.inputLabel}>登记号 Reg No.</Text>
+                                <TextInput
+                                    style={styles.textInput}
+                                    value={shared.regNo}
+                                    onChangeText={v => updateShared({ regNo: v.toUpperCase() })}
+                                    placeholder="B-6120"
+                                    placeholderTextColor={COLORS.placeholder}
+                                    autoCapitalize="characters"
+                                    testID="input-reg-no"
+                                />
+                            </View>
+                        </>
+                    )}
                 </View>
             </View>
 
@@ -661,32 +759,6 @@ export const DualTrackForm: React.FC<Props> = ({
                                     autoCapitalize="characters"
                                     testID="input-arr-icao"
                                 />
-                            </View>
-                            <View style={styles.gap} />
-                            <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>航班号 Flt No.</Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <TextInput
-                                        style={[styles.textInput, { flex: 1 }]}
-                                        value={flight.flightNo}
-                                        onChangeText={v => updateFlight({ flightNo: v.toUpperCase() })}
-                                        onBlur={handleFlightNoBlur}
-                                        placeholder="CA1501"
-                                        placeholderTextColor={COLORS.placeholder}
-                                        autoCapitalize="characters"
-                                        testID="input-flight-no"
-                                    />
-                                    {fetchingFlight && (
-                                        <ActivityIndicator
-                                            size="small"
-                                            color={COLORS.placeholder}
-                                            style={{ marginLeft: 6 }}
-                                        />
-                                    )}
-                                    {fetchSuccess && (
-                                        <Text style={{ marginLeft: 6, fontSize: 16 }}>✨</Text>
-                                    )}
-                                </View>
                             </View>
                         </View>
 
@@ -749,13 +821,14 @@ export const DualTrackForm: React.FC<Props> = ({
                         )}
                     </View>
 
-                    {/* Four-Point Time Axis */}
+                    {/* ── 时刻与运行数据 Time & Operations (Phase 8 consolidated card) ── */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>时刻（当地时间 LT）</Text>
+                        <Text style={styles.sectionTitle}>时刻与运行数据 Time & Operations</Text>
                         <Text style={styles.sectionHint}>
                             填写起飞 (T/O) / 着陆 (LDG) 时刻后，滑出 (OFF) / 滑入 (ON) 时刻将自动推算（±10/5 分钟）
                         </Text>
 
+                        {/* Four-Point Time Axis */}
                         <View style={styles.timeAxisRow}>
                             <MaskedTimeInput
                                 label="OFF"
@@ -787,18 +860,123 @@ export const DualTrackForm: React.FC<Props> = ({
                             />
                         </View>
 
-                        {/* Block Time (auto-calculated, read-only) */}
-                        {blockTimeMin !== null && (
-                            <View style={styles.blockTimeRow}>
-                                <Text style={styles.blockTimeLabel}>飞行时间（Block Time）：</Text>
-                                <Text style={styles.blockTimeValue}>
-                                    {minutesToHHMM(blockTimeMin)}
+                        {/* Compact Time Data Row: Block | Air | Night (input) | Instrument (input) */}
+                        <View style={styles.timeDataRow}>
+                            <View style={styles.timeDataCell}>
+                                <Text style={styles.timeDataLabel}>Block Time</Text>
+                                <Text style={[styles.timeDataValue, blockTimeMin !== null && styles.timeDataValueActive]}>
+                                    {blockTimeMin !== null ? minutesToHHMM(blockTimeMin) : '--:--'}
                                 </Text>
                                 {fieldError('block_time_min') && (
-                                    <Text style={styles.inlineError}>
-                                        {fieldError('block_time_min')}
-                                    </Text>
+                                    <Text style={styles.inlineError}>{fieldError('block_time_min')}</Text>
                                 )}
+                            </View>
+                            <View style={styles.timeDataCell}>
+                                <Text style={styles.timeDataLabel}>Air Time</Text>
+                                <Text style={[styles.timeDataValue, airTimeMin !== null && styles.timeDataValueActive]}>
+                                    {airTimeMin !== null ? minutesToHHMM(airTimeMin) : '--:--'}
+                                </Text>
+                            </View>
+                            <View style={styles.timeDataCellInput}>
+                                <Text style={styles.inputLabel}>
+                                    {showNightHint ? '🌙 夜航 Night (分)' : '夜航 Night (分)'}
+                                </Text>
+                                <TextInput
+                                    style={[styles.textInput, showNightHint && styles.nightHintInput]}
+                                    value={flight.nightFlightRaw}
+                                    onChangeText={v => updateFlight({ nightFlightRaw: v.replace(/\D/g, '') })}
+                                    keyboardType="number-pad"
+                                    placeholder="0"
+                                    placeholderTextColor={COLORS.placeholder}
+                                    testID="input-night-flight"
+                                />
+                            </View>
+                            <View style={styles.timeDataCellInput}>
+                                <Text style={styles.inputLabel}>仪表 Inst (分)</Text>
+                                <TextInput
+                                    style={styles.textInput}
+                                    value={flight.instrumentRaw}
+                                    onChangeText={v => updateFlight({ instrumentRaw: v.replace(/\D/g, '') })}
+                                    keyboardType="number-pad"
+                                    placeholder="0"
+                                    placeholderTextColor={COLORS.placeholder}
+                                    testID="input-instrument"
+                                />
+                            </View>
+                        </View>
+
+                        {/* ── PF/PM Landing Auto-Link ─────────────────────────────── */}
+                        <View style={styles.sectionDivider} />
+                        <Text style={styles.sectionSubTitle}>起飞/着陆次数 T/O & LDG</Text>
+                        {!isManualLandings ? (
+                            flight.pilotRole === 'PF' ? (
+                                <View style={styles.pfLandingBanner}>
+                                    <Text style={styles.pfLandingBannerText}>
+                                        ✓ 已自动计入 1 次
+                                        {(isNightHintTime(flight.ldgRaw) || isNightHintTime(flight.onRaw)) ? '夜间' : '昼间'}
+                                        起飞与着陆
+                                    </Text>
+                                    <TouchableOpacity
+                                        onPress={() => setIsManualLandings(true)}
+                                        testID="btn-manual-landings"
+                                    >
+                                        <Text style={styles.manualLandingsLink}>手动修改</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                <View style={styles.autoLandingPlaceholder}>
+                                    <Text style={styles.autoLandingPlaceholderText}>
+                                        {flight.pilotRole === 'PM'
+                                            ? 'PM 不计入常规起落次数'
+                                            : '选择 PF 后将自动计入起落次数'}
+                                    </Text>
+                                    <TouchableOpacity
+                                        onPress={() => setIsManualLandings(true)}
+                                        testID="btn-manual-landings"
+                                    >
+                                        <Text style={styles.manualLandingsLink}>手动填写</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )
+                        ) : (
+                            <View>
+                                <View style={styles.row}>
+                                    <LandingCounter
+                                        label="昼间起飞 Day T/O"
+                                        value={flight.dayTo}
+                                        onChange={v => updateFlight({ dayTo: v })}
+                                        testIDBase="day-to"
+                                    />
+                                    <View style={styles.gap} />
+                                    <LandingCounter
+                                        label="夜间起飞 Night T/O"
+                                        value={flight.nightTo}
+                                        onChange={v => updateFlight({ nightTo: v })}
+                                        testIDBase="night-to"
+                                    />
+                                </View>
+                                <View style={[styles.row, { marginTop: 8 }]}>
+                                    <LandingCounter
+                                        label="昼间着陆 Day LDG"
+                                        value={flight.dayLdg}
+                                        onChange={v => updateFlight({ dayLdg: v })}
+                                        testIDBase="day-ldg"
+                                    />
+                                    <View style={styles.gap} />
+                                    <LandingCounter
+                                        label="夜间着陆 Night LDG"
+                                        value={flight.nightLdg}
+                                        onChange={v => updateFlight({ nightLdg: v })}
+                                        testIDBase="night-ldg"
+                                    />
+                                </View>
+                                <TouchableOpacity
+                                    style={styles.cancelManualBtn}
+                                    onPress={() => setIsManualLandings(false)}
+                                    testID="btn-cancel-manual-landings"
+                                >
+                                    <Text style={styles.cancelManualBtnText}>↩ 取消手动修改（重置为自动）</Text>
+                                </TouchableOpacity>
                             </View>
                         )}
                     </View>
@@ -959,80 +1137,6 @@ export const DualTrackForm: React.FC<Props> = ({
                         />
                     </View>
 
-                    {/* Takeoffs & Landings — 2×2 grid per SME recommendation */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>起飞/着陆次数</Text>
-                        <Text style={styles.sectionHint}>起飞/着陆各按昼夜分别记录（CCAR-61 标准格式）</Text>
-                        <View style={styles.row}>
-                            <LandingCounter
-                                label="昼间起飞 Day T/O"
-                                value={flight.dayTo}
-                                onChange={v => updateFlight({ dayTo: v })}
-                                testIDBase="day-to"
-                            />
-                            <View style={styles.gap} />
-                            <LandingCounter
-                                label="夜间起飞 Night T/O"
-                                value={flight.nightTo}
-                                onChange={v => updateFlight({ nightTo: v })}
-                                testIDBase="night-to"
-                            />
-                        </View>
-                        <View style={[styles.row, { marginTop: 8 }]}>
-                            <LandingCounter
-                                label="昼间着陆（Day LDG）"
-                                value={flight.dayLdg}
-                                onChange={v => updateFlight({ dayLdg: v })}
-                                testIDBase="day-ldg"
-                            />
-                            <View style={styles.gap} />
-                            <LandingCounter
-                                label="夜间着陆（Night LDG）"
-                                value={flight.nightLdg}
-                                onChange={v => updateFlight({ nightLdg: v })}
-                                testIDBase="night-ldg"
-                            />
-                        </View>
-                    </View>
-
-                    {/* Special Times */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>特殊时间 Special Times</Text>
-                        <Text style={styles.sectionHint}>夜航和仪表时间与飞行时间 (Block Time) 可重叠，不入合规公式计算</Text>
-                        <View style={styles.row}>
-                            <View style={styles.roleTimeField}>
-                                {/* PRD §3.2: 🌙 label icon + amber border when LDG/ON ≥ 19:00 LT */}
-                                <Text style={styles.inputLabel}>
-                                    {showNightHint ? '🌙 夜航 Night (分) (建议填写)' : '夜航 Night (分)'}
-                                </Text>
-                                <TextInput
-                                    style={[
-                                        styles.textInput,
-                                        showNightHint && styles.nightHintInput,
-                                    ]}
-                                    value={flight.nightFlightRaw}
-                                    onChangeText={v => updateFlight({ nightFlightRaw: v.replace(/\D/g, '') })}
-                                    keyboardType="number-pad"
-                                    placeholder="0"
-                                    placeholderTextColor={COLORS.placeholder}
-                                    testID="input-night-flight"
-                                />
-                            </View>
-                            <View style={styles.roleTimeField}>
-                                <Text style={styles.inputLabel}>仪表 Instrument (分)</Text>
-                                <TextInput
-                                    style={styles.textInput}
-                                    value={flight.instrumentRaw}
-                                    onChangeText={v => updateFlight({ instrumentRaw: v.replace(/\D/g, '') })}
-                                    keyboardType="number-pad"
-                                    placeholder="0"
-                                    placeholderTextColor={COLORS.placeholder}
-                                    testID="input-instrument"
-                                />
-                            </View>
-                        </View>
-                    </View>
-
                     {renderRemarksSection()}
                 </>
             )}
@@ -1148,6 +1252,76 @@ export const DualTrackForm: React.FC<Props> = ({
                 </TouchableOpacity>
             </View>
         </ScrollView>
+    );
+};
+
+// ─── ComboInput Sub-Component ───────────────────────────────────────────────
+// Text input + horizontally scrollable preset chips below.
+// Tapping a chip fills the input; active chip is highlighted.
+
+const ComboInput: React.FC<{
+    value: string;
+    onChange: (v: string) => void;
+    presets?: string[];
+    categorizedPresets?: PresetCategory[];
+    placeholder?: string;
+    hasError?: boolean;
+    testID?: string;
+}> = ({ value, onChange, presets, categorizedPresets, placeholder, hasError, testID }) => {
+    const [activeCat, setActiveCat] = useState(categorizedPresets?.[0]?.label ?? '');
+    const displayItems = categorizedPresets?.find(c => c.label === activeCat)?.items || presets || [];
+
+    return (
+        <View>
+            <TextInput
+                style={[styles.textInput, hasError && styles.inputError, { marginBottom: categorizedPresets ? 0 : 8 }]}
+                value={value}
+                onChangeText={v => onChange(v.toUpperCase())}
+                placeholder={placeholder}
+                placeholderTextColor={COLORS.placeholder}
+                autoCapitalize="characters"
+                testID={testID}
+            />
+            {categorizedPresets && categorizedPresets.length > 0 && (
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.catTabsRow}
+                    contentContainerStyle={styles.catTabsContent}
+                    keyboardShouldPersistTaps="handled"
+                >
+                    {categorizedPresets.map(cat => (
+                        <TouchableOpacity
+                            key={cat.label}
+                            style={[styles.catTab, activeCat === cat.label && styles.catTabActive]}
+                            onPress={() => setActiveCat(cat.label)}
+                            testID={`cat-tab-${cat.label}`}
+                        >
+                            <Text style={[styles.catTabText, activeCat === cat.label && styles.catTabTextActive]}>
+                                {cat.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            )}
+            <View
+                style={styles.presetContent}
+                testID={`${testID}-presets`}
+            >
+                {displayItems.map(p => (
+                    <TouchableOpacity
+                        key={p}
+                        style={[styles.presetChip, value === p && styles.presetChipActive]}
+                        onPress={() => onChange(p)}
+                        testID={`preset-${p}`}
+                    >
+                        <Text style={[styles.presetChipText, value === p && styles.presetChipTextActive]}>
+                            {p}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+        </View>
     );
 };
 
@@ -1510,6 +1684,165 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.35,
         shadowRadius: 6,
         elevation: 3,
+    },
+
+    // ── ComboInput presets ────────────────────────────────────────────────────
+    catTabsRow: {
+        marginTop: 8,
+        flexGrow: 0,
+    },
+    catTabsContent: {
+        flexDirection: 'row',
+        gap: 6,
+        paddingRight: 4,
+    },
+    catTab: {
+        paddingHorizontal: 12,
+        paddingVertical: 5,
+        borderRadius: 14,
+        backgroundColor: COLORS.background,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    catTabActive: {
+        backgroundColor: '#1E3A5F',
+        borderColor: COLORS.primary,
+    },
+    catTabText: {
+        color: COLORS.textSecondary,
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    catTabTextActive: {
+        color: '#DBEAFE',
+    },
+    presetContent: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 10,
+        marginTop: 8,
+        marginBottom: 8,
+    },
+    presetChip: {
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        backgroundColor: COLORS.surface,
+    },
+    presetChipActive: {
+        borderColor: COLORS.primary,
+        backgroundColor: '#1E3A5F',
+    },
+    presetChipText: {
+        color: COLORS.textSecondary,
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    presetChipTextActive: {
+        color: '#DBEAFE',
+    },
+
+    // ── Phase 8: Compact time data row (Block / Air / Night / Instrument) ────
+    timeDataRow: {
+        flexDirection: 'row' as const,
+        marginTop: 12,
+        gap: 6,
+    },
+    timeDataCell: {
+        flex: 1,
+        alignItems: 'center' as const,
+        backgroundColor: COLORS.background,
+        borderRadius: 8,
+        borderWidth: 1.5,
+        borderColor: COLORS.border,
+        paddingVertical: 8,
+        paddingHorizontal: 4,
+    },
+    timeDataCellInput: {
+        flex: 1,
+    },
+    timeDataLabel: {
+        color: COLORS.textSecondary,
+        fontSize: 9,
+        fontWeight: '600' as const,
+        textTransform: 'uppercase' as const,
+        letterSpacing: 0.5,
+        marginBottom: 2,
+    },
+    timeDataValue: {
+        color: COLORS.placeholder,
+        fontSize: 16,
+        fontWeight: '700' as const,
+        letterSpacing: 0.5,
+        fontVariant: ['tabular-nums' as const],
+    },
+    timeDataValueActive: {
+        color: COLORS.success,
+    },
+
+    // ── Phase 8: PF/PM landing auto-link UI ──────────────────────────────────
+    sectionDivider: {
+        height: 1,
+        backgroundColor: COLORS.border,
+        marginVertical: 12,
+    },
+    sectionSubTitle: {
+        color: COLORS.textSecondary,
+        fontSize: 11,
+        fontWeight: '700' as const,
+        textTransform: 'uppercase' as const,
+        letterSpacing: 0.5,
+        marginBottom: 8,
+    },
+    pfLandingBanner: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        justifyContent: 'space-between' as const,
+        backgroundColor: '#064E3B',
+        borderWidth: 1,
+        borderColor: '#10B981',
+        borderRadius: 8,
+        padding: 10,
+    },
+    pfLandingBannerText: {
+        color: '#6EE7B7',
+        fontSize: 12,
+        fontWeight: '600' as const,
+        flex: 1,
+    },
+    manualLandingsLink: {
+        color: COLORS.accent,
+        fontSize: 12,
+        fontWeight: '600' as const,
+        marginLeft: 8,
+    },
+    autoLandingPlaceholder: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        justifyContent: 'space-between' as const,
+        paddingVertical: 6,
+    },
+    autoLandingPlaceholderText: {
+        color: COLORS.placeholder,
+        fontSize: 11,
+        fontStyle: 'italic' as const,
+    },
+    cancelManualBtn: {
+        alignSelf: 'center' as const,
+        marginTop: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        backgroundColor: COLORS.surface,
+    },
+    cancelManualBtnText: {
+        color: COLORS.textSecondary,
+        fontSize: 12,
+        fontWeight: '500' as const,
     },
 
     // PICUS quick-append button

@@ -61,11 +61,8 @@ export const OptionPicker: React.FC<Props> = ({
     return (
         <View style={styles.container} testID={testID}>
             <Text style={styles.label}>{label}</Text>
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.row}
-                keyboardShouldPersistTaps="handled"
+            <View
+                style={styles.row}
             >
                 {/* Clear chip */}
                 <TouchableOpacity
@@ -85,7 +82,7 @@ export const OptionPicker: React.FC<Props> = ({
                             key={opt.value}
                             style={[styles.chip, isSelected && styles.chipSelected]}
                             onPress={() => handleSelect(opt.value)}
-                            testID={testID ? `${testID}-${opt.value}` : undefined}
+                            testID={testID ? `${testID}-opt-${opt.value}` : undefined}
                         >
                             <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
                                 {opt.label}
@@ -93,7 +90,7 @@ export const OptionPicker: React.FC<Props> = ({
                         </TouchableOpacity>
                     );
                 })}
-            </ScrollView>
+            </View>
         </View>
     );
 };
@@ -108,7 +105,8 @@ const styles = StyleSheet.create({
     },
     row: {
         flexDirection: 'row',
-        gap: 6,
+        flexWrap: 'wrap',
+        gap: 10,
         paddingBottom: 4,
     },
     chip: {
