@@ -226,6 +226,45 @@ function generateLogbookHtml(records: LogbookRecord[], timezone: 'LT_BEIJING' | 
 </html>`;
 }
 
+// ─── Time Formatter ───────────────────────────────────────────────────────────
+
+/**
+ * Format a UTC ISO time string for display.
+ * LT_BEIJING: apply +8h offset using getUTC* to stay device-timezone-independent.
+ * UTC: extract raw UTC hours/minutes.
+ */
+function fmtTime(utcIso: string | null | undefined, timezone: 'LT_BEIJING' | 'UTC'): string {
+    if (!utcIso) return '';
+    const d = new Date(utcIso);
+    if (isNaN(d.getTime())) return '';
+    if (timezone === 'LT_BEIJING') {
+        const lt = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+        const h = String(lt.getUTCHours()).padStart(2, '0');
+        const m = String(lt.getUTCMinutes()).padStart(2, '0');
+        return `${h}:${m}`;
+    }
+    const h = String(d.getUTCHours()).padStart(2, '0');
+    const m = String(d.getUTCMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+}
+
+// ─── Export Data Preparer ─────────────────────────────────────────────────────
+
+/**
+ * Filter logbook records by record type for export.
+ * 'ALL'       → return all records
+ * 'FLIGHT'    → only dutyType === 'FLIGHT'
+ * 'SIMULATOR' → only dutyType === 'SIMULATOR'
+ */
+function prepareExportData(
+    records: LogbookRecord[],
+    recordType: 'ALL' | 'FLIGHT' | 'SIMULATOR',
+): LogbookRecord[] {
+    if (recordType === 'ALL') return records;
+    if (recordType === 'FLIGHT') return records.filter(r => r.dutyType === 'FLIGHT');
+    return records.filter(r => r.dutyType === 'SIMULATOR');
+}
+
 // ─── Excel Row Mapper ─────────────────────────────────────────────────────────
 
 function recordsToXlsxRows(records: LogbookRecord[], timezone: 'LT_BEIJING' | 'UTC') {
