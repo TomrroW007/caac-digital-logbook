@@ -83,17 +83,24 @@ type SharedFields = {
 // ─── Domain Enum Constants ────────────────────────────────────────────────────
 
 // ─── Aircraft Type Presets (CCAR-61 Chinese commercial aviation + 巴航工业) ─────
-const ACFT_TYPE_PRESETS = [
-    // 空客 Airbus
-    'A319', 'A320', 'A321', 'A321NEO', 'A330-200', 'A330-300', 'A350-900', 'A380',
-    // 波音 Boeing
-    'B737-800', 'B737MAX8', 'B777-200', 'B777-300ER', 'B787-9',
-    // 中国商飞 COMAC
-    'C919', 'ARJ21',
-    // 巴航工业 Embraer
-    'E175', 'E190', 'E195',
-    // ATR / 庞巴迪
-    'ATR72', 'CRJ900',
+export type PresetCategory = {
+    label: string;
+    items: string[];
+};
+
+const ACFT_TYPE_CATEGORIES: PresetCategory[] = [
+    {
+        label: '空客 Airbus',
+        items: ['A319', 'A320', 'A321', 'A321NEO', 'A330-200', 'A330-300', 'A350-900', 'A380']
+    },
+    {
+        label: '波音 Boeing',
+        items: ['B737-800', 'B737MAX8', 'B777-200', 'B777-300ER', 'B787-9']
+    },
+    {
+        label: '其他 Others',
+        items: ['C919', 'ARJ21', 'E175', 'E190', 'E195', 'ATR72', 'CRJ900']
+    }
 ];
 
 const APPROACH_TYPE_OPTIONS = [
@@ -520,7 +527,7 @@ export const DualTrackForm: React.FC<Props> = ({
         } else if (flight.pilotRole === 'PM') {
             setFlight(prev => ({ ...prev, dayTo: 0, nightTo: 0, dayLdg: 0, nightLdg: 0 }));
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [flight.pilotRole, flight.ldgRaw, flight.onRaw, isManualLandings, dutyType]);
 
     const handleFlightNoBlur = useCallback(async () => {
@@ -684,7 +691,7 @@ export const DualTrackForm: React.FC<Props> = ({
                         <ComboInput
                             value={shared.acftType}
                             onChange={v => updateShared({ acftType: v })}
-                            presets={ACFT_TYPE_PRESETS}
+                            categorizedPresets={ACFT_TYPE_CATEGORIES}
                             placeholder="A320"
                             hasError={!!fieldError('acft_type')}
                             testID="input-acft-type"
@@ -1255,43 +1262,68 @@ export const DualTrackForm: React.FC<Props> = ({
 const ComboInput: React.FC<{
     value: string;
     onChange: (v: string) => void;
-    presets: string[];
+    presets?: string[];
+    categorizedPresets?: PresetCategory[];
     placeholder?: string;
     hasError?: boolean;
     testID?: string;
-}> = ({ value, onChange, presets, placeholder, hasError, testID }) => (
-    <View>
-        <TextInput
-            style={[styles.textInput, hasError && styles.inputError]}
-            value={value}
-            onChangeText={v => onChange(v.toUpperCase())}
-            placeholder={placeholder}
-            placeholderTextColor={COLORS.placeholder}
-            autoCapitalize="characters"
-            testID={testID}
-        />
-        <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.presetRow}
-            contentContainerStyle={styles.presetContent}
-            keyboardShouldPersistTaps="handled"
-        >
-            {presets.map(p => (
-                <TouchableOpacity
-                    key={p}
-                    style={[styles.presetChip, value === p && styles.presetChipActive]}
-                    onPress={() => onChange(p)}
-                    testID={`preset-${p}`}
+}> = ({ value, onChange, presets, categorizedPresets, placeholder, hasError, testID }) => {
+    const [activeCat, setActiveCat] = useState(categorizedPresets?.[0]?.label ?? '');
+    const displayItems = categorizedPresets?.find(c => c.label === activeCat)?.items || presets || [];
+
+    return (
+        <View>
+            <TextInput
+                style={[styles.textInput, hasError && styles.inputError, { marginBottom: categorizedPresets ? 0 : 8 }]}
+                value={value}
+                onChangeText={v => onChange(v.toUpperCase())}
+                placeholder={placeholder}
+                placeholderTextColor={COLORS.placeholder}
+                autoCapitalize="characters"
+                testID={testID}
+            />
+            {categorizedPresets && categorizedPresets.length > 0 && (
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.catTabsRow}
+                    contentContainerStyle={styles.catTabsContent}
+                    keyboardShouldPersistTaps="handled"
                 >
-                    <Text style={[styles.presetChipText, value === p && styles.presetChipTextActive]}>
-                        {p}
-                    </Text>
-                </TouchableOpacity>
-            ))}
-        </ScrollView>
-    </View>
-);
+                    {categorizedPresets.map(cat => (
+                        <TouchableOpacity
+                            key={cat.label}
+                            style={[styles.catTab, activeCat === cat.label && styles.catTabActive]}
+                            onPress={() => setActiveCat(cat.label)}
+                            testID={`cat-tab-${cat.label}`}
+                        >
+                            <Text style={[styles.catTabText, activeCat === cat.label && styles.catTabTextActive]}>
+                                {cat.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            )}
+            <View
+                style={styles.presetContent}
+                testID={`${testID}-presets`}
+            >
+                {displayItems.map(p => (
+                    <TouchableOpacity
+                        key={p}
+                        style={[styles.presetChip, value === p && styles.presetChipActive]}
+                        onPress={() => onChange(p)}
+                        testID={`preset-${p}`}
+                    >
+                        <Text style={[styles.presetChipText, value === p && styles.presetChipTextActive]}>
+                            {p}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+        </View>
+    );
+};
 
 // ─── Landing Counter Sub-Component ───────────────────────────────────────────
 
@@ -1655,15 +1687,41 @@ const styles = StyleSheet.create({
     },
 
     // ── ComboInput presets ────────────────────────────────────────────────────
-    presetRow: {
-        marginTop: -4,  // pull up to close gap below TextInput margin
-        marginBottom: 8,
+    catTabsRow: {
+        marginTop: 8,
         flexGrow: 0,
     },
-    presetContent: {
+    catTabsContent: {
         flexDirection: 'row',
         gap: 6,
         paddingRight: 4,
+    },
+    catTab: {
+        paddingHorizontal: 12,
+        paddingVertical: 5,
+        borderRadius: 14,
+        backgroundColor: COLORS.background,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    catTabActive: {
+        backgroundColor: '#1E3A5F',
+        borderColor: COLORS.primary,
+    },
+    catTabText: {
+        color: COLORS.textSecondary,
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    catTabTextActive: {
+        color: '#DBEAFE',
+    },
+    presetContent: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 10,
+        marginTop: 8,
+        marginBottom: 8,
     },
     presetChip: {
         paddingHorizontal: 10,
