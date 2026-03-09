@@ -50,25 +50,22 @@ import { minutesToHHMM } from '../utils/TimeCalculator';
 
 const ROWS_PER_PAGE = 18;
 
-/** Running numeric totals tracked across pages. */
-type PageTotals = {
-    blockFlight: number; blockSim: number;
+// ─── Flight PDF: totals type & helpers ───────────────────────────────────────
+
+type FlightPageTotals = {
+    block: number;
     pic: number; picUs: number; spic: number; sic: number; dual: number; instr: number;
     night: number; instrument: number;
-    dayTo: number; nightTo: number;
-    dayLdg: number; nightLdg: number;
+    dayTo: number; nightTo: number; dayLdg: number; nightLdg: number;
 };
 
-const zeroTotals = (): PageTotals => ({
-    blockFlight: 0, blockSim: 0,
-    pic: 0, picUs: 0, spic: 0, sic: 0, dual: 0, instr: 0,
-    night: 0, instrument: 0,
-    dayTo: 0, nightTo: 0, dayLdg: 0, nightLdg: 0,
+const zeroFlightTotals = (): FlightPageTotals => ({
+    block: 0, pic: 0, picUs: 0, spic: 0, sic: 0, dual: 0, instr: 0,
+    night: 0, instrument: 0, dayTo: 0, nightTo: 0, dayLdg: 0, nightLdg: 0,
 });
 
-const addRecord = (acc: PageTotals, r: LogbookRecord): PageTotals => ({
-    blockFlight: acc.blockFlight + (r.isFlight ? r.blockTimeMin : 0),
-    blockSim: acc.blockSim + (r.isFlight ? 0 : r.blockTimeMin),
+const addFlightRecord = (acc: FlightPageTotals, r: LogbookRecord): FlightPageTotals => ({
+    block: acc.block + r.blockTimeMin,
     pic: acc.pic + r.picMin,
     picUs: acc.picUs + r.safePicUsMin,
     spic: acc.spic + r.safeSpicMin,
@@ -77,19 +74,18 @@ const addRecord = (acc: PageTotals, r: LogbookRecord): PageTotals => ({
     instr: acc.instr + r.instructorMin,
     night: acc.night + r.nightFlightMin,
     instrument: acc.instrument + r.instrumentMin,
-    dayTo: acc.dayTo + (r.isFlight ? r.safeDayTo : 0),
-    nightTo: acc.nightTo + (r.isFlight ? r.safeNightTo : 0),
-    dayLdg: acc.dayLdg + (r.isFlight ? r.dayLdg : 0),
-    nightLdg: acc.nightLdg + (r.isFlight ? r.nightLdg : 0),
+    dayTo: acc.dayTo + r.safeDayTo,
+    nightTo: acc.nightTo + r.safeNightTo,
+    dayLdg: acc.dayLdg + r.dayLdg,
+    nightLdg: acc.nightLdg + r.nightLdg,
 });
 
-/** Render a single subtotal row <tr>. Label appears in first merged col. */
-const subtotalRow = (label: string, t: PageTotals) => `
+// Flight: 24 data columns — colspan=5 covers date(2)+flightNo+acftType+regNo
+const flightSubtotalRow = (label: string, t: FlightPageTotals) => `
     <tr class="subtotal-row">
-      <td colspan="4" style="text-align:right;font-weight:bold;">${label}</td>
-      <td></td>
+      <td colspan="5" style="text-align:right;font-weight:bold;">${label}</td>
       <td colspan="4"></td>
-      <td>${t.blockFlight > 0 ? minutesToHHMM(t.blockFlight) : ''}</td>
+      <td>${minutesToHHMM(t.block)}</td>
       <td>${minutesToHHMM(t.pic)}</td>
       <td>${t.picUs > 0 ? minutesToHHMM(t.picUs) : ''}</td>
       <td>${t.spic > 0 ? minutesToHHMM(t.spic) : ''}</td>
@@ -100,8 +96,29 @@ const subtotalRow = (label: string, t: PageTotals) => `
       <td>${t.instrument > 0 ? minutesToHHMM(t.instrument) : ''}</td>
       <td>${t.dayTo}/${t.dayLdg}</td>
       <td>${t.nightTo}/${t.nightLdg}</td>
-      <td></td><td></td>
-      <td>${t.blockSim > 0 ? minutesToHHMM(t.blockSim) : ''}</td>
+      <td></td><td></td><td></td>
+    </tr>`;
+
+// ─── SIM PDF: totals type & helpers ──────────────────────────────────────────
+
+type SimPageTotals = { block: number; dual: number; instr: number };
+
+const zeroSimTotals = (): SimPageTotals => ({ block: 0, dual: 0, instr: 0 });
+
+const addSimRecord = (acc: SimPageTotals, r: LogbookRecord): SimPageTotals => ({
+    block: acc.block + r.blockTimeMin,
+    dual: acc.dual + r.dualMin,
+    instr: acc.instr + r.instructorMin,
+});
+
+// SIM: 13 columns — colspan=7 covers date(2)+acftType+simNo+simCat+agency+type
+const simSubtotalRow = (label: string, t: SimPageTotals) => `
+    <tr class="subtotal-row">
+      <td colspan="7" style="text-align:right;font-weight:bold;">${label}</td>
+      <td colspan="2"></td>
+      <td>${minutesToHHMM(t.block)}</td>
+      <td>${minutesToHHMM(t.dual)}</td>
+      <td>${minutesToHHMM(t.instr)}</td>
       <td></td>
     </tr>`;
 
@@ -113,48 +130,45 @@ const signatureBar = () => `
     <div class="sig-box">审查员签字 Inspector Signature ______</div>
   </div>`;
 
-function generateLogbookHtml(records: LogbookRecord[]): string {
-    // Chunk records into pages of ROWS_PER_PAGE
+// ─── PDF Generator: 真实飞行（24列）─────────────────────────────────────────
+
+function generateFlightHtml(records: LogbookRecord[], timezone: 'LT_BEIJING' | 'UTC'): string {
+    const tz = timezone === 'LT_BEIJING' ? 'LT' : 'UTC';
     const pages: LogbookRecord[][] = [];
     for (let i = 0; i < records.length; i += ROWS_PER_PAGE) {
         pages.push(records.slice(i, i + ROWS_PER_PAGE));
     }
-    if (pages.length === 0) pages.push([]); // guard: at least one page
+    if (pages.length === 0) pages.push([]);
 
-    // Shared table header (reused by every page's <thead>)
     const thead = `
     <thead>
       <tr>
-        <th>计划日期</th><th>实际日期</th><th>航空器型别</th><th>航空器登记号</th>
+        <th>计划日期</th><th>实际日期</th><th>航班号</th><th>机型</th><th>登记号</th>
         <th>航段 Route</th>
-        <th>OFF UTC</th><th>TO UTC</th><th>LDG UTC</th><th>ON UTC</th>
-        <th>飞行时间 Total</th><th>PIC</th><th>PIC U/S</th><th>SPIC</th><th>SIC</th><th>带飞</th><th>教员</th>
+        <th>OFF(${tz})</th><th>TO(${tz})</th><th>LDG(${tz})</th><th>ON(${tz})</th>
+        <th>Block</th><th>PIC</th><th>PIC U/S</th><th>SPIC</th><th>SIC</th><th>带飞</th><th>教员</th>
         <th>夜航</th><th>仪表</th>
         <th>昼间起降</th><th>夜间起降</th>
-        <th>角色</th><th>进近方式</th>
-        <th>模拟机时间 Sim</th><th>备注</th>
+        <th>角色</th><th>进近方式</th><th>备注</th>
       </tr>
     </thead>`;
 
-    let cumulative = zeroTotals();
-    const pagesHtml = pages.map((pageRecords, pageIndex) => {
+    let cumulative = zeroFlightTotals();
+    return pages.map((pageRecords, pageIndex) => {
         const isLastPage = pageIndex === pages.length - 1;
-
-        // Build data rows for this page
-        const rowsHtml = pageRecords.map(r => {
-            const isFlight = r.dutyType === 'FLIGHT';
-            return `
+        const rowsHtml = pageRecords.map(r => `
     <tr>
       <td>${r.schdDate}</td>
       <td>${r.actlDate}</td>
+      <td>${r.flightNo ?? ''}</td>
       <td>${r.acftType}</td>
       <td>${r.regNo ?? ''}</td>
-      <td>${isFlight ? (r.routeString || '—') : ''}</td>
-      <td>${r.offTimeUtc ? r.offTimeUtc.slice(11, 16) : ''}</td>
-      <td>${r.toTimeUtc ? r.toTimeUtc.slice(11, 16) : ''}</td>
-      <td>${r.ldgTimeUtc ? r.ldgTimeUtc.slice(11, 16) : ''}</td>
-      <td>${r.onTimeUtc ? r.onTimeUtc.slice(11, 16) : ''}</td>
-      <td>${isFlight ? minutesToHHMM(r.blockTimeMin) : ''}</td>
+      <td>${r.routeString || '—'}</td>
+      <td>${fmtTime(r.offTimeUtc, timezone)}</td>
+      <td>${fmtTime(r.toTimeUtc, timezone)}</td>
+      <td>${fmtTime(r.ldgTimeUtc, timezone)}</td>
+      <td>${fmtTime(r.onTimeUtc, timezone)}</td>
+      <td>${minutesToHHMM(r.blockTimeMin)}</td>
       <td>${minutesToHHMM(r.picMin)}</td>
       <td>${r.safePicUsMin > 0 ? minutesToHHMM(r.safePicUsMin) : ''}</td>
       <td>${r.safeSpicMin > 0 ? minutesToHHMM(r.safeSpicMin) : ''}</td>
@@ -163,41 +177,108 @@ function generateLogbookHtml(records: LogbookRecord[]): string {
       <td>${minutesToHHMM(r.instructorMin)}</td>
       <td>${r.nightFlightMin > 0 ? minutesToHHMM(r.nightFlightMin) : ''}</td>
       <td>${r.instrumentMin > 0 ? minutesToHHMM(r.instrumentMin) : ''}</td>
-      <td>${isFlight ? `${r.safeDayTo}/${r.dayLdg}` : ''}</td>
-      <td>${isFlight ? `${r.safeNightTo}/${r.nightLdg}` : ''}</td>
-      <td>${isFlight ? (r.pilotRole ?? '') : ''}</td>
-      <td>${isFlight ? (r.approachType ?? '') : ''}</td>
-      <td>${!isFlight ? minutesToHHMM(r.blockTimeMin) : ''}</td>
+      <td>${r.safeDayTo}/${r.dayLdg}</td>
+      <td>${r.safeNightTo}/${r.nightLdg}</td>
+      <td>${r.pilotRole ?? ''}</td>
+      <td>${r.approachType ?? ''}</td>
       <td>${r.exportRemarks}</td>
-    </tr>`;
-        }).join('');
+    </tr>`).join('');
 
-        // Compute page-block totals and grand-running totals
-        const pageTotals = pageRecords.reduce(addRecord, zeroTotals());
-        const prevCumulative = cumulative;  // snapshot before this page
-        cumulative = pageRecords.reduce(addRecord, prevCumulative);
-
-        // Three subtotal rows (QA: use minutesToHHMM on all time fields)
+        const pageTotals = pageRecords.reduce(addFlightRecord, zeroFlightTotals());
+        const prevCumulative = cumulative;
+        cumulative = pageRecords.reduce(addFlightRecord, prevCumulative);
         const subtotals = [
-            subtotalRow('本页合计', pageTotals),
-            subtotalRow('以往累计', prevCumulative),
-            subtotalRow('总计', cumulative),
+            flightSubtotalRow('本页合计', pageTotals),
+            flightSubtotalRow('以往累计', prevCumulative),
+            flightSubtotalRow('总计', cumulative),
         ].join('');
-
-        // QA: page-break only between pages, NOT after the last page
-        const pageBreak = isLastPage
-            ? ''
-            : ' style="page-break-after: always"';
-
+        const pageBreak = isLastPage ? '' : ' style="page-break-after: always"';
         return `
   <div class="page-container"${pageBreak}>
-    <table>
-      ${thead}
-      <tbody>${rowsHtml}${subtotals}</tbody>
-    </table>
+    <table>${thead}<tbody>${rowsHtml}${subtotals}</tbody></table>
     ${signatureBar()}
   </div>`;
     }).join('\n');
+}
+
+// ─── PDF Generator: 模拟机（13列）────────────────────────────────────────────
+
+function generateSimHtml(records: LogbookRecord[]): string {
+    const pages: LogbookRecord[][] = [];
+    for (let i = 0; i < records.length; i += ROWS_PER_PAGE) {
+        pages.push(records.slice(i, i + ROWS_PER_PAGE));
+    }
+    if (pages.length === 0) pages.push([]);
+
+    const thead = `
+    <thead>
+      <tr>
+        <th>计划日期</th><th>实际日期</th><th>机型</th><th>SIM编号</th><th>SIM等级</th>
+        <th>训练机构</th><th>训练类型</th>
+        <th>FROM(LT)</th><th>TO(LT)</th>
+        <th>SIM时间</th><th>带飞</th><th>教员</th><th>备注</th>
+      </tr>
+    </thead>`;
+
+    let cumulative = zeroSimTotals();
+    return pages.map((pageRecords, pageIndex) => {
+        const isLastPage = pageIndex === pages.length - 1;
+        const rowsHtml = pageRecords.map(r => `
+    <tr>
+      <td>${r.schdDate}</td>
+      <td>${r.actlDate}</td>
+      <td>${r.acftType}</td>
+      <td>${r.simNo ?? ''}</td>
+      <td>${r.simCat ?? ''}</td>
+      <td>${r.trainingAgency ?? ''}</td>
+      <td>${r.trainingType ?? ''}</td>
+      <td>${fmtTime(r.offTimeUtc, 'LT_BEIJING')}</td>
+      <td>${fmtTime(r.onTimeUtc, 'LT_BEIJING')}</td>
+      <td>${minutesToHHMM(r.blockTimeMin)}</td>
+      <td>${minutesToHHMM(r.dualMin)}</td>
+      <td>${minutesToHHMM(r.instructorMin)}</td>
+      <td>${r.exportRemarks}</td>
+    </tr>`).join('');
+
+        const pageTotals = pageRecords.reduce(addSimRecord, zeroSimTotals());
+        const prevCumulative = cumulative;
+        cumulative = pageRecords.reduce(addSimRecord, prevCumulative);
+        const subtotals = [
+            simSubtotalRow('本页合计', pageTotals),
+            simSubtotalRow('以往累计', prevCumulative),
+            simSubtotalRow('总计', cumulative),
+        ].join('');
+        const pageBreak = isLastPage ? '' : ' style="page-break-after: always"';
+        return `
+  <div class="page-container"${pageBreak}>
+    <table>${thead}<tbody>${rowsHtml}${subtotals}</tbody></table>
+    ${signatureBar()}
+  </div>`;
+    }).join('\n');
+}
+
+// ─── PDF Wrapper: combine flight / SIM / both sections ────────────────────────
+
+function buildExportHtml(
+    flightRecords: LogbookRecord[],
+    simRecords: LogbookRecord[],
+    exportType: 'ALL' | 'FLIGHT' | 'SIMULATOR',
+    timezone: 'LT_BEIJING' | 'UTC',
+): string {
+    const totalCount = flightRecords.length + simRecords.length;
+    let sections = '';
+
+    if (exportType === 'FLIGHT' || exportType === 'ALL') {
+        sections += `<h2 class="chapter">✈ 真实飞行记录 · ${flightRecords.length} 条</h2>`;
+        sections += generateFlightHtml(flightRecords, timezone);
+    }
+    if (exportType === 'SIMULATOR' || exportType === 'ALL') {
+        if (exportType === 'ALL' && flightRecords.length > 0) {
+            sections += '<div style="page-break-after: always"></div>';
+        }
+        sections += `<h2 class="chapter">🖥 模拟机训练记录 · ${simRecords.length} 条</h2>`;
+        sections += generateSimHtml(simRecords);
+    }
 
     return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -208,6 +289,7 @@ function generateLogbookHtml(records: LogbookRecord[]): string {
     body  { font-family: Arial, Helvetica, sans-serif; font-size: 8pt; color: #111; }
     h1    { font-size: 13pt; text-align: center; margin-bottom: 4px; }
     h2    { font-size: 9pt;  text-align: center; color: #555; margin-bottom: 8px; }
+    h2.chapter { font-size: 11pt; color: #1e3a5f; border-bottom: 2px solid #1e3a5f; padding-bottom: 4px; margin: 16px 0 8px; }
     .page-container { margin-bottom: 8px; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     th    { background: #1e3a5f; color: #fff; font-size: 7pt; padding: 3px 2px; text-align: center; border: 1px solid #999; }
@@ -220,27 +302,69 @@ function generateLogbookHtml(records: LogbookRecord[]): string {
 </head>
 <body>
   <h1>飞行记录本 PILOT LOGBOOK</h1>
-  <h2>依据 CCAR-61 部 · 共 ${records.length} 条记录 · 导出时间: ${new Date().toLocaleString('zh-CN')}</h2>
-  ${pagesHtml}
+  <h2>依据 CCAR-61 部 · 共 ${totalCount} 条记录 · 导出时间: ${new Date().toLocaleString('zh-CN')}</h2>
+  ${sections}
 </body>
 </html>`;
 }
 
-// ─── Excel Row Mapper ─────────────────────────────────────────────────────────
+// ─── Time Formatter ───────────────────────────────────────────────────────────
 
-function recordsToXlsxRows(records: LogbookRecord[]) {
+/**
+ * Format a UTC ISO time string for display.
+ * LT_BEIJING: apply +8h offset using getUTC* to stay device-timezone-independent.
+ * UTC: extract raw UTC hours/minutes.
+ */
+function fmtTime(utcIso: string | null | undefined, timezone: 'LT_BEIJING' | 'UTC'): string {
+    if (!utcIso) return '';
+    const d = new Date(utcIso);
+    if (isNaN(d.getTime())) return '';
+    if (timezone === 'LT_BEIJING') {
+        const lt = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+        const h = String(lt.getUTCHours()).padStart(2, '0');
+        const m = String(lt.getUTCMinutes()).padStart(2, '0');
+        return `${h}:${m}`;
+    }
+    const h = String(d.getUTCHours()).padStart(2, '0');
+    const m = String(d.getUTCMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+}
+
+// ─── Export Data Preparer ─────────────────────────────────────────────────────
+
+/**
+ * Filter logbook records by record type for export.
+ * 'ALL'       → return all records
+ * 'FLIGHT'    → only dutyType === 'FLIGHT'
+ * 'SIMULATOR' → only dutyType === 'SIMULATOR'
+ */
+function prepareExportData(
+    records: LogbookRecord[],
+    recordType: 'ALL' | 'FLIGHT' | 'SIMULATOR',
+): LogbookRecord[] {
+    if (recordType === 'ALL') return records;
+    if (recordType === 'FLIGHT') return records.filter(r => r.dutyType === 'FLIGHT');
+    return records.filter(r => r.dutyType === 'SIMULATOR');
+}
+
+// ─── Excel Row Mappers ────────────────────────────────────────────────────────
+
+/** 真实飞行记录 → Excel 行（飞行专属23列）*/
+function flightRecordsToXlsxRows(records: LogbookRecord[], timezone: 'LT_BEIJING' | 'UTC') {
+    const tzLabel = timezone === 'LT_BEIJING' ? 'LT' : 'UTC';
     return records.map(r => ({
         '计划日期': r.schdDate,
         '实际日期': r.actlDate,
-        '航空器型别': r.acftType,
-        '航空器登记号': r.regNo ?? '',
-        '航段/SIM': r.dutyType === 'FLIGHT' ? r.routeString : (r.simNo ?? ''),
         '航班号': r.flightNo ?? '',
-        'OFF(UTC)': r.offTimeUtc,
-        'TO(UTC)': r.toTimeUtc ?? '',
-        'LDG(UTC)': r.ldgTimeUtc ?? '',
-        'ON(UTC)': r.onTimeUtc,
+        '机型': r.acftType,
+        '登记号': r.regNo ?? '',
+        '航段': r.routeString ?? '',
+        [`OFF(${tzLabel})`]: fmtTime(r.offTimeUtc, timezone),
+        [`TO(${tzLabel})`]: fmtTime(r.toTimeUtc, timezone),
+        [`LDG(${tzLabel})`]: fmtTime(r.ldgTimeUtc, timezone),
+        [`ON(${tzLabel})`]: fmtTime(r.onTimeUtc, timezone),
         'Block(min)': r.blockTimeMin,
+        'Block(H:M)': minutesToHHMM(r.blockTimeMin),
         'PIC(min)': r.picMin,
         'PIC U/S(min)': r.safePicUsMin,
         'SPIC(min)': r.safeSpicMin,
@@ -249,18 +373,33 @@ function recordsToXlsxRows(records: LogbookRecord[]) {
         '教员(min)': r.instructorMin,
         '夜航(min)': r.nightFlightMin,
         '仪表(min)': r.instrumentMin,
-        // PRD §5.3 col 13/14: keep as separate NUMERIC columns for Pivot Table use
-        '昼间起飞': r.safeDayTo,    // ← Phase 5 addition
-        '夜间起飞': r.safeNightTo,  // ← Phase 5 addition
+        '昼间起飞': r.safeDayTo,
+        '夜间起飞': r.safeNightTo,
         '昼间落地': r.dayLdg,
         '夜间落地': r.nightLdg,
         '角色': r.pilotRole ?? '',
         '进近方式': r.approachType ?? '',
+        '备注': r.exportRemarks,
+    }));
+}
+
+/** 模拟机记录 → Excel 行（SIM专属12列，无时区选项—SIM时刻统一为LT北京时间）*/
+function simRecordsToXlsxRows(records: LogbookRecord[]) {
+    return records.map(r => ({
+        '计划日期': r.schdDate,
+        '实际日期': r.actlDate,
+        '机型': r.acftType,
+        'SIM编号': r.simNo ?? '',
         'SIM等级': r.simCat ?? '',
         '训练机构': r.trainingAgency ?? '',
         '训练类型': r.trainingType ?? '',
+        'FROM(LT)': fmtTime(r.offTimeUtc, 'LT_BEIJING'),
+        'TO(LT)': fmtTime(r.onTimeUtc, 'LT_BEIJING'),
+        'SIM时间(min)': r.blockTimeMin,
+        'SIM时间(H:M)': minutesToHHMM(r.blockTimeMin),
+        '带飞(min)': r.dualMin,
+        '教员(min)': r.instructorMin,
         '备注': r.exportRemarks,
-        'Block(H:M)': minutesToHHMM(r.blockTimeMin),
     }));
 }
 
@@ -287,19 +426,26 @@ const COLORS = {
 const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
     const [exportingPdf, setExportingPdf] = useState(false);
     const [exportingExcel, setExportingExcel] = useState(false);
+    // ── Phase 8: Export filter states ────────────────────────────────────────
+    const [exportRecordType, setExportRecordType] = useState<'ALL' | 'FLIGHT' | 'SIMULATOR'>('ALL');
+    const [exportTimezone, setExportTimezone] = useState<'LT_BEIJING' | 'UTC'>('LT_BEIJING');
 
-    // ── PDF Export ───────────────────────────────────────────────────────────
+    // ── PDF Export ──────────────────────────────────────────────────
     const handlePdfExport = async () => {
-        if (logbooks.length === 0) {
-            Alert.alert('无记录', '暂无可导出的飞行记录。');
+        const flightRecords = exportRecordType === 'SIMULATOR'
+            ? [] : logbooks.filter(r => r.dutyType === 'FLIGHT');
+        const simRecords = exportRecordType === 'FLIGHT'
+            ? [] : logbooks.filter(r => r.dutyType === 'SIMULATOR');
+
+        if (flightRecords.length === 0 && simRecords.length === 0) {
+            Alert.alert('无记录', '暂无可导出的记录（请检查过滤条件）。');
             return;
         }
         setExportingPdf(true);
         try {
-            const html = generateLogbookHtml(logbooks);
+            const html = buildExportHtml(flightRecords, simRecords, exportRecordType, exportTimezone);
 
             if (Platform.OS === 'web') {
-                // Web: open a new window with the raw HTML, then print
                 const printWindow = window.open('', '_blank');
                 if (!printWindow) {
                     Alert.alert('弹窗被拦截', '请允许弹出窗口后重试。');
@@ -310,7 +456,6 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 printWindow.focus();
                 printWindow.print();
             } else {
-                // Native: expo-print → file → share sheet
                 const canShare = await Sharing!.isAvailableAsync();
                 if (!canShare) {
                     Alert.alert('不支持', '当前设备不支持文件分享功能。');
@@ -335,22 +480,31 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
     // ── Excel Export ─────────────────────────────────────────────────────────
     const handleExcelExport = async () => {
-        if (logbooks.length === 0) {
-            Alert.alert('无记录', '暂无可导出的飞行记录。');
+        const flightRecords = exportRecordType === 'SIMULATOR'
+            ? [] : logbooks.filter(r => r.dutyType === 'FLIGHT');
+        const simRecords = exportRecordType === 'FLIGHT'
+            ? [] : logbooks.filter(r => r.dutyType === 'SIMULATOR');
+
+        if (flightRecords.length === 0 && simRecords.length === 0) {
+            Alert.alert('无记录', '暂无可导出的记录（请检查过滤条件）。');
             return;
         }
         setExportingExcel(true);
         try {
-            const rows = recordsToXlsxRows(logbooks);
-            const ws = XLSX.utils.json_to_sheet(rows);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'Logbook');
+            // ALL → 两个 Sheet；单类型 → 对应单 Sheet
+            if (flightRecords.length > 0) {
+                const ws = XLSX.utils.json_to_sheet(flightRecordsToXlsxRows(flightRecords, exportTimezone));
+                XLSX.utils.book_append_sheet(wb, ws, '飞行记录');
+            }
+            if (simRecords.length > 0) {
+                const ws = XLSX.utils.json_to_sheet(simRecordsToXlsxRows(simRecords));
+                XLSX.utils.book_append_sheet(wb, ws, '模拟机记录');
+            }
 
             if (Platform.OS === 'web') {
-                // Web: SheetJS writeFile triggers browser download directly
                 XLSX.writeFile(wb, `Logbook_${Date.now()}.xlsx`);
             } else {
-                // Native: write base64 to file system, then share
                 const canShare = await Sharing!.isAvailableAsync();
                 if (!canShare) {
                     Alert.alert('不支持', '当前设备不支持文件分享功能。');
@@ -379,6 +533,47 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
 
+            {/* ── Phase 8: Export Filter Card (Segmented Controls) ── */}
+            <Text style={styles.sectionHeader}>导出设置 Export Settings</Text>
+            <View style={styles.filterCard}>
+                <Text style={styles.filterLabel}>记录类型 Record Type</Text>
+                <View style={styles.segmentedRow}>
+                    {(['ALL', 'FLIGHT', 'SIMULATOR'] as const).map(type => (
+                        <TouchableOpacity
+                            key={type}
+                            style={[styles.segBtn, exportRecordType === type && styles.segBtnActive]}
+                            onPress={() => setExportRecordType(type)}
+                            testID={`filter-type-${type.toLowerCase()}`}
+                        >
+                            <Text style={[styles.segBtnText, exportRecordType === type && styles.segBtnTextActive]}>
+                                {type === 'ALL' ? '全部' : type === 'FLIGHT' ? '真实飞行' : '模拟机'}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
+                <Text style={[styles.filterLabel, { marginTop: 12 }]}>时间标准 Timezone</Text>
+                <View style={styles.segmentedRow}>
+                    {(['LT_BEIJING', 'UTC'] as const).map(tz => (
+                        <TouchableOpacity
+                            key={tz}
+                            style={[styles.segBtn, exportTimezone === tz && styles.segBtnActive]}
+                            onPress={() => setExportTimezone(tz)}
+                            testID={`filter-tz-${tz.toLowerCase()}`}
+                        >
+                            <Text style={[styles.segBtnText, exportTimezone === tz && styles.segBtnTextActive]}>
+                                {tz === 'LT_BEIJING' ? '北京时间 LT' : 'UTC'}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
+                <Text style={styles.filterCount}>
+                    已筛选 {prepareExportData(logbooks, exportRecordType).length} 条记录 ·
+                    {exportTimezone === 'LT_BEIJING' ? ' 展示北京时间 (UTC+8)' : ' 展示 UTC 时间'}
+                </Text>
+            </View>
+
             <Text style={styles.sectionHeader}>导出选项</Text>
 
             {/* PDF Export */}
@@ -395,7 +590,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                         符合 CCAR-61 部标准，含教员签字栏，可直接打印提交局方审查
                     </Text>
                     <Text style={styles.exportCount}>
-                        {logbooks.length} 条记录 · A4 横向
+                        {prepareExportData(logbooks, exportRecordType).length} 条记录 · A4 横向
                     </Text>
                 </View>
                 {exportingPdf
@@ -422,7 +617,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                         供个人数据备份与电脑端二次分析，格式兼容 WPS / Microsoft Excel
                     </Text>
                     <Text style={styles.exportCount}>
-                        {logbooks.length} 条记录 · .xlsx 格式
+                        {prepareExportData(logbooks, exportRecordType).length} 条记录 · .xlsx 格式
                     </Text>
                 </View>
                 {exportingExcel
@@ -439,7 +634,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>版本</Text>
-                <Text style={styles.infoValue}>1.0.0</Text>
+                <Text style={styles.infoValue}>1.4.0 (Phase 8)</Text>
             </View>
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>合规标准</Text>
@@ -525,6 +720,56 @@ const styles = StyleSheet.create({
         color: COLORS.textSecondary,
         fontSize: 11,
         marginLeft: 8,
+    },
+
+    // ── Phase 8: Export filter card & segmented controls ────────────────────────
+    filterCard: {
+        backgroundColor: COLORS.card,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 12,
+    },
+    filterLabel: {
+        color: COLORS.textSecondary,
+        fontSize: 11,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.8,
+        marginBottom: 8,
+    },
+    segmentedRow: {
+        flexDirection: 'row',
+        gap: 6,
+    },
+    segBtn: {
+        flex: 1,
+        paddingVertical: 8,
+        alignItems: 'center',
+        borderRadius: 8,
+        borderWidth: 1.5,
+        borderColor: COLORS.border,
+        backgroundColor: COLORS.background,
+    },
+    segBtnActive: {
+        borderColor: COLORS.primary,
+        backgroundColor: '#1E3A5F',
+    },
+    segBtnText: {
+        color: COLORS.textSecondary,
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    segBtnTextActive: {
+        color: '#DBEAFE',
+    },
+    filterCount: {
+        color: COLORS.accent,
+        fontSize: 11,
+        marginTop: 10,
+        fontWeight: '500',
+        textAlign: 'center',
     },
 
     // Offline privacy disclaimer (bottom of 关于 section)
