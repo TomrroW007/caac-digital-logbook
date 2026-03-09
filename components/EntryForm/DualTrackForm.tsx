@@ -82,6 +82,20 @@ type SharedFields = {
 
 // ─── Domain Enum Constants ────────────────────────────────────────────────────
 
+// ─── Aircraft Type Presets (CCAR-61 Chinese commercial aviation + 巴航工业) ─────
+const ACFT_TYPE_PRESETS = [
+    // 空客 Airbus
+    'A319', 'A320', 'A321', 'A321NEO', 'A330-200', 'A330-300', 'A350-900', 'A380',
+    // 波音 Boeing
+    'B737-800', 'B737MAX8', 'B777-200', 'B777-300ER', 'B787-9',
+    // 中国商飞 COMAC
+    'C919', 'ARJ21',
+    // 巴航工业 Embraer
+    'E175', 'E190', 'E195',
+    // ATR / 庞巴迪
+    'ATR72', 'CRJ900',
+];
+
 const APPROACH_TYPE_OPTIONS = [
     { label: 'ILS CAT I', value: 'ILS CAT I' },
     { label: 'ILS CAT II', value: 'ILS CAT II' },
@@ -417,7 +431,7 @@ export const DualTrackForm: React.FC<Props> = ({
             flightNo: dutyType === 'FLIGHT' ? (flight.flightNo || null) : null,
             depIcao: dutyType === 'FLIGHT' ? (flight.depIcao || null) : null,
             arrIcao: dutyType === 'FLIGHT' ? (flight.arrIcao || null) : null,
-            regNo: shared.regNo || null,
+            regNo: dutyType === 'FLIGHT' ? (shared.regNo || null) : null,
             toUtcISO: dutyType === 'FLIGHT' ? toUtcISO : null,
             ldgUtcISO: dutyType === 'FLIGHT' ? ldgUtcISO : null,
             approachType: dutyType === 'FLIGHT' ? (flight.approachType || null) : null,
@@ -664,30 +678,35 @@ export const DualTrackForm: React.FC<Props> = ({
 
                 <View style={styles.row}>
                     <View style={styles.flexField}>
-                        <Text style={styles.inputLabel}>机型 A/C Type *</Text>
-                        <TextInput
-                            style={[styles.textInput, fieldError('acft_type') && styles.inputError]}
+                        <Text style={[styles.inputLabel, fieldError('acft_type') && { color: COLORS.error }]}>
+                            机型 A/C Type *
+                        </Text>
+                        <ComboInput
                             value={shared.acftType}
-                            onChangeText={v => updateShared({ acftType: v.toUpperCase() })}
+                            onChange={v => updateShared({ acftType: v })}
+                            presets={ACFT_TYPE_PRESETS}
                             placeholder="A320"
-                            placeholderTextColor={COLORS.placeholder}
-                            autoCapitalize="characters"
+                            hasError={!!fieldError('acft_type')}
                             testID="input-acft-type"
                         />
                     </View>
-                    <View style={styles.gap} />
-                    <View style={styles.flexField}>
-                        <Text style={styles.inputLabel}>登记号 Reg No.</Text>
-                        <TextInput
-                            style={styles.textInput}
-                            value={shared.regNo}
-                            onChangeText={v => updateShared({ regNo: v.toUpperCase() })}
-                            placeholder="B-6120"
-                            placeholderTextColor={COLORS.placeholder}
-                            autoCapitalize="characters"
-                            testID="input-reg-no"
-                        />
-                    </View>
+                    {dutyType === 'FLIGHT' && (
+                        <>
+                            <View style={styles.gap} />
+                            <View style={styles.flexField}>
+                                <Text style={styles.inputLabel}>登记号 Reg No.</Text>
+                                <TextInput
+                                    style={styles.textInput}
+                                    value={shared.regNo}
+                                    onChangeText={v => updateShared({ regNo: v.toUpperCase() })}
+                                    placeholder="B-6120"
+                                    placeholderTextColor={COLORS.placeholder}
+                                    autoCapitalize="characters"
+                                    testID="input-reg-no"
+                                />
+                            </View>
+                        </>
+                    )}
                 </View>
             </View>
 
@@ -1229,6 +1248,51 @@ export const DualTrackForm: React.FC<Props> = ({
     );
 };
 
+// ─── ComboInput Sub-Component ───────────────────────────────────────────────
+// Text input + horizontally scrollable preset chips below.
+// Tapping a chip fills the input; active chip is highlighted.
+
+const ComboInput: React.FC<{
+    value: string;
+    onChange: (v: string) => void;
+    presets: string[];
+    placeholder?: string;
+    hasError?: boolean;
+    testID?: string;
+}> = ({ value, onChange, presets, placeholder, hasError, testID }) => (
+    <View>
+        <TextInput
+            style={[styles.textInput, hasError && styles.inputError]}
+            value={value}
+            onChangeText={v => onChange(v.toUpperCase())}
+            placeholder={placeholder}
+            placeholderTextColor={COLORS.placeholder}
+            autoCapitalize="characters"
+            testID={testID}
+        />
+        <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.presetRow}
+            contentContainerStyle={styles.presetContent}
+            keyboardShouldPersistTaps="handled"
+        >
+            {presets.map(p => (
+                <TouchableOpacity
+                    key={p}
+                    style={[styles.presetChip, value === p && styles.presetChipActive]}
+                    onPress={() => onChange(p)}
+                    testID={`preset-${p}`}
+                >
+                    <Text style={[styles.presetChipText, value === p && styles.presetChipTextActive]}>
+                        {p}
+                    </Text>
+                </TouchableOpacity>
+            ))}
+        </ScrollView>
+    </View>
+);
+
 // ─── Landing Counter Sub-Component ───────────────────────────────────────────
 
 const LandingCounter: React.FC<{
@@ -1588,6 +1652,38 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.35,
         shadowRadius: 6,
         elevation: 3,
+    },
+
+    // ── ComboInput presets ────────────────────────────────────────────────────
+    presetRow: {
+        marginTop: -4,  // pull up to close gap below TextInput margin
+        marginBottom: 8,
+        flexGrow: 0,
+    },
+    presetContent: {
+        flexDirection: 'row',
+        gap: 6,
+        paddingRight: 4,
+    },
+    presetChip: {
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        backgroundColor: COLORS.surface,
+    },
+    presetChipActive: {
+        borderColor: COLORS.primary,
+        backgroundColor: '#1E3A5F',
+    },
+    presetChipText: {
+        color: COLORS.textSecondary,
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    presetChipTextActive: {
+        color: '#DBEAFE',
     },
 
     // ── Phase 8: Compact time data row (Block / Air / Night / Instrument) ────
