@@ -12,6 +12,9 @@
 
 const mockIsConfigured = jest.fn(() => false);
 const mockGetUser = jest.fn().mockResolvedValue({ data: { user: null }, error: null });
+const mockOnAuthStateChange = jest.fn().mockReturnValue({
+    data: { subscription: { unsubscribe: jest.fn() } },
+});
 const mockFrom = jest.fn().mockReturnValue({
     select: jest.fn().mockReturnThis(),
     upsert: jest.fn().mockResolvedValue({ error: null }),
@@ -24,7 +27,10 @@ const mockFrom = jest.fn().mockReturnValue({
 jest.mock('../../utils/supabaseClient', () => ({
     isSupabaseConfigured: mockIsConfigured,
     supabase: {
-        auth: { getUser: mockGetUser },
+        auth: {
+            getUser: mockGetUser,
+            onAuthStateChange: mockOnAuthStateChange,
+        },
         from: mockFrom,
     },
 }));
@@ -37,7 +43,7 @@ jest.mock('../../database', () => ({
 
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
-import { readSyncStatus, syncWithCloud, type SyncStatus } from '../SyncService';
+import { readSyncStatus, syncWithCloud, subscribeToAuthChanges, type SyncStatus } from '../SyncService';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // readSyncStatus
@@ -135,5 +141,70 @@ describe('syncWithCloud', () => {
         if (result.state === 'error') {
             expect(result.message).toContain('Network timeout');
         }
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// subscribeToAuthChanges — auth state listener
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('subscribeToAuthChanges', () => {
+    beforeEach(() => {
+        mockOnAuthStateChange.mockClear();
+    });
+
+    it('calls supabase.auth.onAuthStateChange and returns an unsubscribe function', () => {
+        const mockUnsubscribe = jest.fn();
+        mockOnAuthStateChange.mockReturnValue({
+            data: { subscription: { unsubscribe: mockUnsubscribe } },
+        });
+
+        const callback = jest.fn();
+        const unsubscribe = subscribeToAuthChanges(callback);
+
+        expect(mockOnAuthStateChange).toHaveBeenCalledTimes(1);
+        expect(typeof unsubscribe).toBe('function');
+
+        // Calling unsubscribe should call the underlying subscription's unsubscribe
+        unsubscribe();
+        expect(mockUnsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('invokes the callback with the session when auth state changes', () => {
+        const mockSession = { user: { id: 'abc-123' }, access_token: 'token' };
+
+        // Capture the listener passed to onAuthStateChange, then invoke it
+        let capturedListener: ((event: string, session: unknown) => void) | null = null;
+        mockOnAuthStateChange.mockImplementation((listener) => {
+            capturedListener = listener;
+            return { data: { subscription: { unsubscribe: jest.fn() } } };
+        });
+
+        const callback = jest.fn();
+        subscribeToAuthChanges(callback);
+
+        // Simulate a SIGNED_IN event
+        capturedListener!('SIGNED_IN', mockSession);
+        expect(callback).toHaveBeenCalledWith(mockSession);
+    });
+
+    it('resets sync status to "local" when session is null (sign-out)', async () => {
+        let capturedListener: ((event: string, session: unknown) => void) | null = null;
+        mockOnAuthStateChange.mockImplementation((listener) => {
+            capturedListener = listener;
+            return { data: { subscription: { unsubscribe: jest.fn() } } };
+        });
+
+        mockIsConfigured.mockReturnValue(true);
+        const callback = jest.fn();
+        subscribeToAuthChanges(callback);
+
+        // Simulate SIGNED_OUT (session = null)
+        capturedListener!('SIGNED_OUT', null);
+        expect(callback).toHaveBeenCalledWith(null);
+
+        // After sign-out, readSyncStatus should return { state: 'local' }
+        const status = await readSyncStatus();
+        expect(status.state).toBe('local');
     });
 });
