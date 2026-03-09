@@ -33,6 +33,12 @@ jobs:
       - name: Run TypeScript typecheck
         run: npm run typecheck
 
+      - name: Verify Web Build (Expo Export)
+        run: npm run build:web
+        env:
+          EXPO_PUBLIC_WORKER_URL: 'https://caac-logbook-worker.caac-logbook.workers.dev'
+          CI: true
+
       - name: Run Jest tests with coverage
         run: npm test
         env:
