@@ -3,7 +3,7 @@
  * @description Dashboard with reactive observables for 90-day experience and totals.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -13,7 +13,7 @@ import {
     StatusBar,
     Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import withObservables from '@nozbe/with-observables';
 import { Q } from '@nozbe/watermelondb';
@@ -27,6 +27,8 @@ import {
     type ExperienceRecord,
 } from '../utils/ComplianceValidator';
 import { minutesToHHMM } from '../utils/TimeCalculator';
+import { readSyncStatus, type SyncStatus } from '../utils/SyncService';
+import SyncStatusCapsule from '../components/shared/SyncStatusCapsule';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
 
@@ -58,6 +60,19 @@ interface DashboardProps {
 
 const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
     const navigation = useNavigation<Nav>();
+
+    // ── 云同步状态指示器（UI/UX: 每次屏幕聯焦时刺新）──
+    const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: 'local' });
+
+    useFocusEffect(
+        useCallback(() => {
+            let cancelled = false;
+            readSyncStatus().then(s => {
+                if (!cancelled) setSyncStatus(s);
+            });
+            return () => { cancelled = true; };
+        }, []),
+    );
 
     // ── 90-Day Experience Calculation ──
     const experienceReport = useMemo(() => {
@@ -113,10 +128,13 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                     </View>
                 )}
 
-                {/* Header */}
+                    {/* Header */}
                 <View style={styles.header}>
-                    <Text style={styles.title}>✈ Pilot Logbook</Text>
-                    <Text style={styles.subtitle}>飞行经历记录本</Text>
+                    <View style={styles.headerLeft}>
+                        <Text style={styles.title}>✈ Pilot Logbook</Text>
+                        <Text style={styles.subtitle}>飞行经历记录本</Text>
+                    </View>
+                    <SyncStatusCapsule status={syncStatus} />
                 </View>
 
                 {/* 90-Day Experience Card — PRD §4.2 dual-row layout */}
@@ -232,7 +250,13 @@ export default DashboardScreen;
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.background },
     content: { padding: 20, paddingBottom: 40 },
-    header: { marginBottom: 24 },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 24,
+    },
+    headerLeft: { flex: 1 },
     title: { color: COLORS.text, fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
     subtitle: { color: COLORS.textSecondary, fontSize: 14, marginTop: 4 },
 
