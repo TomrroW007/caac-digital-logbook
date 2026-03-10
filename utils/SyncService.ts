@@ -87,7 +87,9 @@ export const syncWithCloud = async (): Promise<SyncStatus> => {
                     .from('logbook_records')
                     .select('*')
                     .eq('user_id', userId)
-                    .gt('last_modified_at', sinceIso);
+                    // 使用服务端 updated_at（moddatetime 触发器控制，防时钟漂移 PRD §24）
+                    // gte（大于等于）避免精确边界漏拉取
+                    .gte('updated_at', sinceIso);
 
                 if (error) throw new Error(`Pull 失败：${error.message}`);
 

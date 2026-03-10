@@ -418,10 +418,8 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
         try {
             const wb = generateImportTemplate();
             if (Platform.OS === 'web') {
-                const XLSX = require('xlsx');
                 XLSX.writeFile(wb, 'CAAC_Logbook_Import_Template.xlsx');
             } else {
-                const XLSX = require('xlsx');
                 const canShare = await Sharing!.isAvailableAsync();
                 if (!canShare) {
                     Alert.alert('不支持', '当前设备不支持文件分享功能。');
@@ -452,18 +450,17 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
         try {
             const existingCount = await checkExistingImports();
             if (existingCount > 0) {
-                await new Promise<void>(resolve => {
+                const shouldContinue = await new Promise<boolean>(resolve => {
                     Alert.alert(
                         '⚠️ 检测到已有导入记录',
                         `数据库中已存在 ${existingCount} 条带有「[导入]」标记的历史记录。\n\n继续导入可能导致重复计算飞行时间，系统将自动跳过指纹相同的条目，但强烈建议先核查后再继续。`,
                         [
-                            { text: '取消', style: 'cancel', onPress: () => resolve() },
-                            { text: '继续导入', style: 'destructive', onPress: () => resolve() },
+                            { text: '取消', style: 'cancel', onPress: () => resolve(false) },
+                            { text: '继续导入', style: 'destructive', onPress: () => resolve(true) },
                         ],
                     );
                 });
-                // 若用户选取消则提结果为 null，此处通过再次 checkExistingImports 无法区分
-                // 简化处理：弹窗后继续执行，importFromExcel 内部指纹去重会拦截重复
+                if (!shouldContinue) return;
             }
         } catch {
             // 预检失败不阻断主流程
@@ -609,7 +606,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                     <Text style={styles.exportDesc}>
                         获取包含列名说明与填写示例的 .xlsx 空白模板，将历史数据粘贴后再上传
                     </Text>
-                    <Text style={styles.exportCount}>格式：CAAR-61 标准 30 列模板</Text>
+                    <Text style={styles.exportCount}>格式：CCAR-61 标准 30 列模板</Text>
                 </View>
                 {downloadingTpl
                     ? (<><ActivityIndicator size="small" color={COLORS.accent} />
@@ -852,7 +849,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>版本</Text>
-                <Text style={styles.infoValue}>1.0.0</Text>
+                <Text style={styles.infoValue}>1.4.0</Text>
             </View>
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>合规标准</Text>

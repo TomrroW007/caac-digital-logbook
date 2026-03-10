@@ -68,6 +68,14 @@
  * -- 索引
  * create index on logbook_records (user_id, actl_date);
  * create index on logbook_records (user_id, last_modified_at);
+ * create index on logbook_records (user_id, updated_at);  -- pullChanges 使用服务端时间戳
+ *
+ * -- 防时钟漂移：moddatetime 触发器（PRD §24）
+ * -- Supabase 已内置 moddatetime 扩展，无需手动 CREATE EXTENSION。
+ * -- 触发器让服务端强制接管 updated_at，彻底排除客户端时钟错误导致的漏拉取。
+ * create trigger handle_updated_at
+ *   before update on logbook_records
+ *   for each row execute procedure moddatetime(updated_at);
  *
  * ─────────────────────────────────────────────────────────────────────────────
  */

@@ -64,20 +64,21 @@ const safeInt = (v: unknown): number => {
 const toDateString = (val: unknown): string => {
     // SheetJS 在 cellDates:true 时会返回 JS Date
     if (val instanceof Date) {
-        const y = val.getFullYear();
-        const m = String(val.getMonth() + 1).padStart(2, '0');
-        const d = String(val.getDate()).padStart(2, '0');
+        // 必须使用 UTC 方法，避免设备本地时区（如 UTC-8）导致日期提前一天
+        const y = val.getUTCFullYear();
+        const m = String(val.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(val.getUTCDate()).padStart(2, '0');
         return `${y}-${m}-${d}`;
     }
     const s = String(val ?? '').trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    // 尝试解析，使用本地日期避免时区偏移
+    // 尝试解析，统一使用 UTC 方法防止本地时区偏移
     if (s) {
         const dt = new Date(s);
         if (!isNaN(dt.getTime())) {
-            const y = dt.getFullYear();
-            const mo = String(dt.getMonth() + 1).padStart(2, '0');
-            const d = String(dt.getDate()).padStart(2, '0');
+            const y = dt.getUTCFullYear();
+            const mo = String(dt.getUTCMonth() + 1).padStart(2, '0');
+            const d = String(dt.getUTCDate()).padStart(2, '0');
             return `${y}-${mo}-${d}`;
         }
     }
