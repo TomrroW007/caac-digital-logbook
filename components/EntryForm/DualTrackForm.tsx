@@ -23,11 +23,10 @@ import {
 import MaskedTimeInput from '../shared/MaskedTimeInput';
 import { OptionPicker } from '../shared/OptionPicker';
 import { SmartDatePicker } from '../shared/SmartDatePicker';
+import { calcBlockMinutes, hhmmToMinutes, localTimeToUtcISO, utcISOToLocalHHMM, minutesToHHMM, isNightHintTime } from '../../utils/TimeCalculator';
 import { resolveFourTimePoints, calcFlightTimeMin } from '../../utils/FlightMath';
 import { validateFlightRecord, type FlightRecordInput } from '../../utils/ComplianceValidator';
 import { lookupAirportOffset, isDstObservingRegion } from '../../data/airportTimezones';
-import { localTimeToUtcISO, isNightHintTime } from '../../utils/TimeCalculator';
-import { minutesToHHMM } from '../../utils/TimeCalculator';
 import type { LogbookRecord } from '../../model/LogbookRecord';
 import type { CapacityRole } from '../../model/schema';
 import { fetchFlightInfo } from '../../utils/ApiService';
@@ -346,10 +345,21 @@ export const DualTrackForm: React.FC<Props> = ({
                 offUtcISO, toUtcISO, ldgUtcISO, onUtcISO,
             });
             setBlockTimeMin(resolved.blockTimeMin);
+
+            // If inference took place (±10 mins triggered), auto-fill the UI fields
+            if (resolved.wasInferred) {
+                setFlight(prev => ({
+                    ...prev,
+                    // If we inferred OFF, map it back to the local HHMM of the departure airport
+                    offRaw: (!offUtcISO) ? utcISOToLocalHHMM(resolved.offUtcISO, depOffsetOverride) : prev.offRaw,
+                    // If we inferred ON, map it back to the local HHMM of the arrival airport
+                    onRaw: (!onUtcISO) ? utcISOToLocalHHMM(resolved.onUtcISO, arrOffsetOverride) : prev.onRaw,
+                }));
+            }
         } catch {
             // Not enough data yet to resolve — silent
         }
-    }, [flight, shared.actlDate, depOffsetOverride, arrOffsetOverride]);
+    }, [flight, shared.actlDate, depOffsetOverride, arrOffsetOverride, setFlight]);
 
     // ── SIM Time Auto-Fill ────────────────────────────────────────────────────
 
@@ -825,7 +835,7 @@ export const DualTrackForm: React.FC<Props> = ({
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Time & Operations</Text>
                         <Text style={styles.sectionHint}>
-                            Enter T/O and LDG times. OFF and ON will be auto-estimated (±10/5 min).
+                            Auto-estimation default: OFF = T/O - 10 mins, ON = LDG + 10 mins.
                         </Text>
 
                         {/* Four-Point Time Axis */}

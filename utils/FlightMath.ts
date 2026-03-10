@@ -4,12 +4,12 @@
  *
  * Consumes primitives from TimeCalculator.ts and adds domain-level logic:
  *  1. Resolving any combination of the four time points (OFF/TO/LDG/ON) into a
- *     complete, validated set using the PRD-specified 10-5 inference rule.
+ *     complete, validated set using the inferred ±10 minutes rule.
  *  2. Time-order validation (OFF ≤ TO ≤ LDG ≤ ON) with cross-midnight awareness.
  *  3. Air time (wheels-up to wheels-down) calculation, separate from block time.
  *
- * PRD §3.2: "若填入了 TO 和 LDG 且 OFF/ON 为空，系统静默推算：
- *            OFF = TO - 10分钟，ON = LDG + 5分钟"
+ * PRD Update: "若填入了 TO 和 LDG 且 OFF/ON 为空，系统静默推算：
+ *            OFF = TO - 10分钟，ON = LDG + 10分钟"
  */
 
 import { calcBlockMinutes, inferOffOn } from './TimeCalculator';
@@ -56,7 +56,7 @@ export type TimeOrderResult = {
  *  1. If ALL FOUR points are provided → use as-is, no inference.
  *  2. If TO + LDG are provided AND (OFF is null OR ON is null):
  *       - missing OFF = TO - 10 minutes
- *       - missing ON  = LDG + 5 minutes
+ *       - missing ON  = LDG + 10 minutes
  *  3. If the above cannot produce both OFF and ON → throws an error.
  *     (Caller must ensure minimum required fields are present.)
  *
@@ -83,7 +83,7 @@ export type TimeOrderResult = {
  *   ldgUtcISO: '2024-03-01T10:30:00Z',
  *   onUtcISO:  null,
  * })
- * // → { offUtcISO: '...08:00Z', onUtcISO: '...10:35Z', blockTimeMin: 155,
+ * // → { offUtcISO: '...08:00Z', onUtcISO: '...10:40Z', blockTimeMin: 160,
  * //     flightTimeMin: 140, wasInferred: true }
  */
 export function resolveFourTimePoints(pts: FourTimePoints): ResolvedTimePoints {
