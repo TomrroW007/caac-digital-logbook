@@ -3,7 +3,7 @@
  * @description Dashboard with reactive observables for 90-day experience and totals.
  */
 
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
     View,
     Text,
@@ -28,6 +28,8 @@ import {
 } from '../utils/ComplianceValidator';
 import { minutesToHHMM } from '../utils/TimeCalculator';
 import { readSyncStatus, type SyncStatus } from '../utils/SyncService';
+import { subscribeToAuthChanges } from '../utils/SyncService';
+import { isSupabaseConfigured } from '../utils/supabaseClient';
 import SyncStatusCapsule from '../components/shared/SyncStatusCapsule';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -61,7 +63,7 @@ interface DashboardProps {
 const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
     const navigation = useNavigation<Nav>();
 
-    // ── 云同步状态指示器（UI/UX: 每次屏幕聯焦时刺新）──
+    // ── 云同步状态指示器（UI/UX: 每次屏幕联焦时刷新）──
     const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: 'local' });
 
     useFocusEffect(
@@ -73,6 +75,18 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
             return () => { cancelled = true; };
         }, []),
     );
+
+    // ── Auth 状态订阅：登录/登出后实时刷新 SyncStatus（不依赖屏幕切换）──
+    useEffect(() => {
+        if (!isSupabaseConfigured()) return;
+        const unsubscribe = subscribeToAuthChanges(session => {
+            // session 为 null → 已登出，重置到 local 状态
+            setSyncStatus(session ? { state: 'local' } : { state: 'local' });
+            // 无论如何都立即刷新最新的持久化状态
+            readSyncStatus().then(s => setSyncStatus(s));
+        });
+        return unsubscribe;
+    }, []);
 
     // ── 90-Day Experience Calculation ──
     const experienceReport = useMemo(() => {
@@ -128,7 +142,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                     </View>
                 )}
 
-                    {/* Header */}
+                {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
                         <Text style={styles.title}>✈ Pilot Logbook</Text>

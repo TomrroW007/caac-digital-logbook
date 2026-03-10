@@ -94,11 +94,16 @@ export const syncWithCloud = async (): Promise<SyncStatus> => {
                 if (error) throw new Error(`Pull 失败：${error.message}`);
 
                 const rows = data ?? [];
+                // 清除 WatermelonDB 不接受的内部元数据字段 + Supabase 服务端字段
+                const sanitize = (r: Record<string, any>) => {
+                    const { _status, _changed, user_id, created_at, updated_at, ...clean } = r;
+                    return clean;
+                };
                 // 按 is_deleted 分流到 deleted / updated
                 const deleted = rows
                     .filter(r => r.is_deleted)
                     .map(r => r.id as string);
-                const updated = rows.filter(r => !r.is_deleted);
+                const updated = rows.filter(r => !r.is_deleted).map(sanitize);
 
                 return {
                     changes: {
