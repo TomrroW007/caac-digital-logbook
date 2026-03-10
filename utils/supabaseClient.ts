@@ -74,14 +74,17 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-export const SUPABASE_URL      = 'https://kwwcedgpvudecyqqigik.supabase.co';
-export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3d2NlZGdwdnVkZWN5cXFpZ2lrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2OTM5NTEsImV4cCI6MjA4ODI2OTk1MX0.vLcr-rV5j8gD4gPZNavjC0DFGD4QzCcp_ZkpQhMAaZU';
+export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 /**
- * 判断 Supabase 是否已配置（未替换占位值则视为未配置，进入本地模式）。
+ * 判断 Supabase 是否已配置（未配置则进入本地模式）。
+ * 如果环境变量为空，或仍保留了 your-project-id 占位符，均视为未配置。
  */
-export const isSupabaseConfigured = (): boolean =>
-    !SUPABASE_URL.includes('your-project-id') &&
-    !SUPABASE_ANON_KEY.includes('your-anon-key');
+export const isSupabaseConfigured = (): boolean => {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return false;
+    if (SUPABASE_URL.includes('your-project-id') || SUPABASE_ANON_KEY.includes('your-anon-key')) return false;
+    return true;
+};
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
