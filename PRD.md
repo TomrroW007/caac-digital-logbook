@@ -1,19 +1,12 @@
 
-# ✈️ 民航飞行员专属 LOGBOOK 产品需求文档 (PRD) V1.5 完整版
+# ✈️ 民航飞行员专属 LOGBOOK 产品需求文档 (PRD) V1.4 Phase 8 更新版
 
-**文档状态**：已冻结 (Frozen) - V1.5 包含 Phase 7 Supabase 双向云同步与 Phase 8 重构实施细节
+**文档状态**：已冻结 (Frozen) - V1.4 同步 Phase 8 极速录入与多维导出重构实施细节  
 **目标受众**：全栈独立开发者 (Solo Developer)  
 **合规基准**：严格遵循 CCAR-61部、CCAR-121部 及 ICAO 附件1  
-**核心原则**：双向云同步、离线绝对优先、全量 LT 极简录入、分钟制整数存储、动态双轨表单、双格式合规导出
-
-### 📝 V1.5 Phase 7 更新记录 (Supabase 双向云同步闭环)
-
-22. **双向云端同步落盘**：引入 Supabase PostgreSQL + Auth 作为云端支撑，结合 WatermelonDB 官方 `synchronize()` API，实现 100% 同步闭环。
-23. **军工级多租户隔离**：通过 Supabase 的 Row Level Security (RLS)，在数据库物理引擎层面通过 `auth.uid() = user_id` 进行强隔离。
-24. **时钟漂移防雷**：针对 `pullChanges` 强依赖时间戳问题，采用服务端 PostgreSQL 的 `moddatetime` 扩展强制接管 `updated_at` 触发器，彻底消除客户端系统时钟错误乱导致的数据漏拉取问题。
+**核心原则**：离线绝对优先、全量 LT 极简录入、分钟制整数存储、动态双轨表单、双格式合规导出
 
 ### 📝 V1.4 Phase 8 更新记录 (极速录入 & 多维导出重构)
-
 
 14. **航班号提权到第一行**：将 航班号 (Flt No.) 移至基本信息卡片首行，与实际日期 (Actl Date) 并排。确保 API 自动填充在表单最早阶段被触发。
 15. **时刻与运行数据卡片合并**：将原「时刻（当地时间 LT）」、「起飞/着陆次数」、「特殊时间 Special Times」三个独立卡片合并为单一「时刻与运行数据 Time & Operations」卡片。
@@ -54,11 +47,11 @@
 
 ### 1.1 背景与痛点
 
-传统纸质飞行经历记录本存在携带不便、跨时区计算易错、90天近期飞行经历难以实时监控等痛点。市面现有工具缺乏对 CAAC (CCAR-61部) 精细化填报、夏令时自适应及教员实地签字场景的本土化支持。同时，纯单机记录一旦设备丢失极易造成毁灭性数据损失。
+传统纸质飞行经历记录本存在携带不便、跨时区计算易错、90天近期飞行经历难以实时监控等痛点。市面现有工具缺乏对 CAAC (CCAR-61部) 精细化填报、夏令时自适应及教员实地签字场景的本土化支持。
 
-### 1.2 产品战略 (V1.5 范围)
+### 1.2 产品目标 (V1.0 范围)
 
-打造一款专业供飞行员个人使用的电子 LOGBOOK。 **V1.5 核心战略**：**“离线体验优先 + Supabase 强隔离安全同步闭环 + 局方标准双规导出”**。通过纯数字免冒号输入、带 DST 感知的离线时区计算，实现秒级合规录入，并直接输出可供局方盖章的标准化打印件，最终通过后台静默的军工级云端同步，保障数据零丢失。
+打造一款专业供飞行员个人使用的电子 LOGBOOK。 **V1.0 核心战略**：**暂缓云端同步，主打“纯本地极致体验 + PDF/Excel 双轨导出闭环”**。通过纯数字免冒号输入、带 DST 感知的离线时区计算，实现秒级合规录入，并直接输出可供局方盖章的标准化打印件。
 
 ## 二、 系统架构设计 (System Architecture)
 
@@ -76,7 +69,7 @@
     -   **缓存策略**：首查 KV，命中则秒回（<50ms）；未命中则请求上游 API，写入 KV。
     -   **返回字段只含**：`dep_icao`, `arr_icao`, `aircraft_icao`, `reg_number`。严禁返回时间点。
     
-5.  **强隔离离线同步架构**：前端采用 WatermelonDB 保障 100% 离线读写。云端架构采用 Supabase (PostgreSQL + Auth)，利用其天然的 Row Level Security (RLS) 与服务端 `moddatetime` 时间戳触发器，完美解决多租户混流鉴权以及飞行员跨时区导致的客户端时间错乱同步遗漏问题。本地表结构包含 UUID, is_deleted, last_modified_at, sync_status 用以支撑合并引擎。
+5.  **云端架构预留**：本地表结构包含 UUID, is_deleted, last_modified_at, sync_status。
     
 
 ## 三、 动态双轨交互与核心业务流程 (Dual-Track UI)
@@ -276,9 +269,3 @@
     -   编写 App 端 ApiService.ts（3 秒熔断、静默降级）。
         
     -   在 DualTrackForm 实现航班号失焦自动填充（仅填空字段，不覆盖时间轴）。
-
--   **📍 Phase 7: Supabase 免费云端双向同步闭环**
-    
-    -   集成 Supabase Auth。
-    -   开发 `SyncService.ts`，基于 WatermelonDB `synchronize()` api 打造 pull / push 调度循环。
-    -   在 Supabase 控制台完成 PostgreSQL 结构映射、RLS 行级安全设置以及针对 Client Clock Drift 的 `moddatetime` 时间同步触发器设定。
