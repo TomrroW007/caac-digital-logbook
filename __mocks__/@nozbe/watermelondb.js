@@ -12,4 +12,11 @@ class Model {
 const appSchema = (def) => def;
 const tableSchema = (def) => def;
 
-module.exports = { Model, appSchema, tableSchema };
+// Minimal Q mock used by ImportService / SyncService query builders
+const Q = {
+    where: jest.fn((...args) => args),
+    like: jest.fn((pattern) => pattern),
+    desc: 'desc',
+};
+
+module.exports = { Model, appSchema, tableSchema, Q };

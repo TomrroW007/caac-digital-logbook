@@ -32,14 +32,24 @@ module.exports = {
     // The TimeCalculator tests don't use WatermelonDB at all, but schema.ts
     // and LogbookRecord.ts import from it — this mock satisfies those imports.
     moduleNameMapper: {
-        '@nozbe/watermelondb': '<rootDir>/__mocks__/@nozbe/watermelondb.js',
+        '@nozbe/watermelondb/sync': '<rootDir>/__mocks__/@nozbe/watermelondb/sync.js',
         '@nozbe/watermelondb/decorators': '<rootDir>/__mocks__/@nozbe/watermelondb/decorators.js',
+        '@nozbe/watermelondb': '<rootDir>/__mocks__/@nozbe/watermelondb.js',
+        '@supabase/supabase-js': '<rootDir>/__mocks__/@supabase/supabase-js.js',
+        'expo-document-picker': '<rootDir>/__mocks__/expo-document-picker.js',
+        '^react-native$': '<rootDir>/__mocks__/react-native.js',
     },
 
     // Coverage configuration
     collectCoverageFrom: [
         'utils/**/*.ts',
         '!utils/**/__tests__/**',
+        // Phase 7 infrastructure-layer files: depend on native file-picker,
+        // Supabase network, and WatermelonDB write operations — covered by
+        // integration / device tests, not unit tests.
+        '!utils/ImportService.ts',
+        '!utils/SyncService.ts',
+        '!utils/supabaseClient.ts',
     ],
 
     coverageThreshold: {
