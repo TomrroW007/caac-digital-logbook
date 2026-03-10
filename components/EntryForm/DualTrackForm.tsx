@@ -382,7 +382,15 @@ export const DualTrackForm: React.FC<Props> = ({
         }
     }, [sim, shared.actlDate]);
 
-    // ── Save ──────────────────────────────────────────────────────────────────
+    const roleTimeSum =
+        (parseInt(flight.picRaw) || 0) +
+        (parseInt(flight.picUsRaw) || 0) +
+        (parseInt(flight.spicRaw) || 0) +
+        (parseInt(flight.sicRaw) || 0) +
+        (parseInt(flight.dualRaw) || 0) +
+        (parseInt(flight.instructorRaw) || 0);
+
+    // ── Main Render ──────────────────────────────────────────────────────────────────
 
     const handleSave = () => {
         setSubmitted(true);
@@ -418,6 +426,12 @@ export const DualTrackForm: React.FC<Props> = ({
             actlDate: shared.actlDate,
             schdDate: shared.schdDate,
             acftType: shared.acftType || null,
+            depIcao: dutyType === 'FLIGHT' ? flight.depIcao : null,
+            arrIcao: dutyType === 'FLIGHT' ? flight.arrIcao : null,
+            regNo: dutyType === 'FLIGHT' ? shared.regNo : null,
+            simCat: dutyType === 'SIMULATOR' ? sim.simCat : null,
+            simNo: dutyType === 'SIMULATOR' ? sim.simNo : null,
+            trainingType: dutyType === 'SIMULATOR' ? sim.trainingType : null,
             remarks: shared.remarks || null,
         };
 
@@ -711,9 +725,11 @@ export const DualTrackForm: React.FC<Props> = ({
                         <>
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>Reg No.</Text>
+                                <Text style={[styles.inputLabel, fieldError('reg_no') && { color: COLORS.error }]}>
+                                    Reg No. *
+                                </Text>
                                 <TextInput
-                                    style={styles.textInput}
+                                    style={[styles.textInput, fieldError('reg_no') && styles.inputError]}
                                     value={shared.regNo}
                                     onChangeText={v => updateShared({ regNo: v.toUpperCase() })}
                                     placeholder="B-6120"
@@ -721,6 +737,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                     autoCapitalize="characters"
                                     testID="input-reg-no"
                                 />
+                                {fieldError('reg_no') && <Text style={styles.inlineError}>{fieldError('reg_no')}</Text>}
                             </View>
                         </>
                     )}
@@ -735,9 +752,9 @@ export const DualTrackForm: React.FC<Props> = ({
                         <Text style={styles.sectionTitle}>Route (DEP-ARR)</Text>
                         <View style={styles.row}>
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>DEP</Text>
+                                <Text style={[styles.inputLabel, fieldError('dep_icao') && { color: COLORS.error }]}>DEP *</Text>
                                 <TextInput
-                                    style={styles.textInput}
+                                    style={[styles.textInput, fieldError('dep_icao') && styles.inputError]}
                                     value={flight.depIcao}
                                     onChangeText={v => {
                                         const icao = v.toUpperCase();
@@ -751,12 +768,13 @@ export const DualTrackForm: React.FC<Props> = ({
                                     autoCapitalize="characters"
                                     testID="input-dep-icao"
                                 />
+                                {fieldError('dep_icao') && <Text style={styles.inlineError}>{fieldError('dep_icao')}</Text>}
                             </View>
                             <Text style={styles.arrow}>→</Text>
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>ARR</Text>
+                                <Text style={[styles.inputLabel, fieldError('arr_icao') && { color: COLORS.error }]}>ARR *</Text>
                                 <TextInput
-                                    style={styles.textInput}
+                                    style={[styles.textInput, fieldError('arr_icao') && styles.inputError]}
                                     value={flight.arrIcao}
                                     onChangeText={v => {
                                         const icao = v.toUpperCase();
@@ -769,6 +787,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                     autoCapitalize="characters"
                                     testID="input-arr-icao"
                                 />
+                                {fieldError('arr_icao') && <Text style={styles.inlineError}>{fieldError('arr_icao')}</Text>}
                             </View>
                         </View>
 
@@ -993,7 +1012,16 @@ export const DualTrackForm: React.FC<Props> = ({
 
                     {/* Role Times */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Experience Time</Text>
+                        <View style={styles.experienceHeaderRow}>
+                            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Experience Time</Text>
+                            {blockTimeMin !== null && (
+                                <View style={[styles.stickyBlockBadge, roleTimeSum > blockTimeMin ? styles.stickyBlockBadgeError : {}]}>
+                                    <Text style={[styles.stickyBlockText, roleTimeSum > blockTimeMin ? styles.stickyBlockTextError : {}]}>
+                                        Block: {minutesToHHMM(blockTimeMin)}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
                         <Text style={styles.sectionHint}>
                             Total experience must not exceed Block Time.
                         </Text>
@@ -1159,26 +1187,29 @@ export const DualTrackForm: React.FC<Props> = ({
 
                         <View style={styles.row}>
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>SIM No.</Text>
+                                <Text style={[styles.inputLabel, fieldError('sim_no') && { color: COLORS.error }]}>SIM No. *</Text>
                                 <TextInput
-                                    style={styles.textInput}
+                                    style={[styles.textInput, fieldError('sim_no') && styles.inputError]}
                                     value={sim.simNo}
                                     onChangeText={v => updateSim({ simNo: v })}
                                     placeholder="SIM-01"
                                     placeholderTextColor={COLORS.placeholder}
                                     testID="input-sim-no"
                                 />
+                                {fieldError('sim_no') && <Text style={styles.inlineError}>{fieldError('sim_no')}</Text>}
                             </View>
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>FSTD Level</Text>
+                                <Text style={[styles.inputLabel, fieldError('sim_cat') && { color: COLORS.error }]}>FSTD Level *</Text>
                                 <OptionPicker
                                     label=""
                                     value={sim.simCat}
                                     onChange={v => updateSim({ simCat: v })}
                                     options={SIM_CAT_OPTIONS}
+                                    hasError={!!fieldError('sim_cat')}
                                     testID="picker-sim-cat"
                                 />
+                                {fieldError('sim_cat') && <Text style={styles.inlineError}>{fieldError('sim_cat')}</Text>}
                             </View>
                         </View>
 
@@ -1196,14 +1227,16 @@ export const DualTrackForm: React.FC<Props> = ({
                             </View>
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>Training Type</Text>
+                                <Text style={[styles.inputLabel, fieldError('training_type') && { color: COLORS.error }]}>Training Type *</Text>
                                 <OptionPicker
                                     label=""
                                     value={sim.trainingType}
                                     onChange={v => updateSim({ trainingType: v })}
                                     options={TRAINING_TYPE_OPTIONS}
+                                    hasError={!!fieldError('training_type')}
                                     testID="picker-training-type"
                                 />
+                                {fieldError('training_type') && <Text style={styles.inlineError}>{fieldError('training_type')}</Text>}
                             </View>
                         </View>
 
@@ -1790,6 +1823,33 @@ const styles = StyleSheet.create({
     },
     timeDataValueActive: {
         color: COLORS.success,
+    },
+
+    experienceHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    stickyBlockBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 4,
+        backgroundColor: '#1E3A8A',
+        borderWidth: 1,
+        borderColor: '#3B82F6',
+    },
+    stickyBlockBadgeError: {
+        backgroundColor: '#7F1D1D',
+        borderColor: '#EF4444',
+    },
+    stickyBlockText: {
+        color: '#DBEAFE',
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    stickyBlockTextError: {
+        color: '#FEE2E2',
     },
 
     // ── Phase 8: PF/PM landing auto-link UI ──────────────────────────────────
