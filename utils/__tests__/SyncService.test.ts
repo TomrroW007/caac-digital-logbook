@@ -73,11 +73,18 @@ describe('readSyncStatus', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('syncWithCloud', () => {
+    let consoleErrorMock: jest.SpyInstance;
+
     beforeEach(() => {
+        consoleErrorMock = jest.spyOn(console, 'error').mockImplementation(() => { });
         mockIsConfigured.mockReturnValue(false);
         mockGetUser.mockResolvedValue({ data: { user: null }, error: null });
         const { synchronize } = require('@nozbe/watermelondb/sync');
         (synchronize as jest.Mock).mockClear();
+    });
+
+    afterEach(() => {
+        consoleErrorMock.mockRestore();
     });
 
     it('returns { state: "local" } immediately when Supabase is not configured', async () => {
@@ -141,6 +148,7 @@ describe('syncWithCloud', () => {
         if (result.state === 'error') {
             expect(result.message).toContain('Network timeout');
         }
+        expect(consoleErrorMock).toHaveBeenCalled();
     });
 });
 
