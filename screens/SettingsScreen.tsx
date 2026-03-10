@@ -799,7 +799,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
 
             {/* ── 历史数据导入 (Phase 7.1) ── */}
-            <Text style={styles.sectionHeader}>历史数据导入</Text>
+            <Text style={styles.sectionHeader}>Historical Data Import</Text>
 
             {/* 下载标准导入模板 */}
             <TouchableOpacity
@@ -810,7 +810,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             >
                 <Text style={styles.exportIcon}>📥</Text>
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>📥 下载标准导入模板</Text>
+                    <Text style={styles.exportTitle}>📥 Download Import Template</Text>
                     <Text style={styles.exportDesc}>
                         获取包含列名说明与填写示例的 .xlsx 空白模板，将历史数据粘贴后再上传
                     </Text>
@@ -832,7 +832,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             >
                 <Text style={styles.exportIcon}>📤</Text>
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>📤 导入历史记录</Text>
+                    <Text style={styles.exportTitle}>📤 Import Historical Records</Text>
                     <Text style={styles.exportDesc}>
                         从标准模板 .xlsx 批量导入历史飞行记录，自动去重，打破迁移成本
                     </Text>
@@ -891,7 +891,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             </View>
 
             {/* ── 导出选项 ── */}
-            <Text style={styles.sectionHeader}>导出选项</Text>
+            <Text style={styles.sectionHeader}>Export Options</Text>
 
             {/* PDF Export */}
             <TouchableOpacity
@@ -902,7 +902,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             >
                 <Text style={styles.exportIcon}>📄</Text>
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>📄 导出标准 PDF 报表</Text>
+                    <Text style={styles.exportTitle}>📄 Export Standard PDF Report</Text>
                     <Text style={styles.exportDesc}>
                         符合 CCAR-61 部标准，含教员签字栏，可直接打印提交局方审查
                     </Text>
@@ -929,7 +929,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             >
                 <Text style={styles.exportIcon}>📊</Text>
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>📊 导出原始 Excel 数据</Text>
+                    <Text style={styles.exportTitle}>📊 Export Raw Excel Data</Text>
                     <Text style={styles.exportDesc}>
                         供个人数据备份与电脑端二次分析，格式兼容 WPS / Microsoft Excel
                     </Text>
@@ -948,7 +948,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             </TouchableOpacity>
 
             {/* ── 云端同步 (Phase 7.2) ── */}
-            <Text style={styles.sectionHeader}>云端同步</Text>
+            <Text style={styles.sectionHeader}>Cloud Sync</Text>
 
             {/* 账号状态 / 登录入口 */}
             {isSupabaseConfigured() && (
@@ -1108,7 +1108,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             </Modal>
 
             {/* ── 关于 ── */}
-            <Text style={styles.sectionHeader}>关于</Text>
+            <Text style={styles.sectionHeader}>About</Text>
 
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>版本</Text>

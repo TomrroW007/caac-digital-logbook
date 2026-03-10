@@ -629,7 +629,7 @@ export const DualTrackForm: React.FC<Props> = ({
                 {/* Row 1: Dates + Flight No (FLIGHT only — placed here to trigger API early) */}
                 <View style={styles.row}>
                     <View style={styles.flexField}>
-                        <Text style={styles.inputLabel}>计划日期 Schd Date</Text>
+                        <Text style={styles.inputLabel}>Schd Date</Text>
                         <TextInput
                             style={[styles.textInput, fieldError('schd_date') && styles.inputError]}
                             value={shared.schdDate}
@@ -642,7 +642,7 @@ export const DualTrackForm: React.FC<Props> = ({
                     <View style={styles.gap} />
                     <View style={styles.flexField}>
                         <Text style={styles.inputLabel}>
-                            实际日期 Actl Date *{'  '}
+                            Actl Date *{'  '}
                             <Text style={styles.dateEchoText}>{shared.actlDate}</Text>
                         </Text>
                         <SmartDatePicker
@@ -655,7 +655,7 @@ export const DualTrackForm: React.FC<Props> = ({
                         <>
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>航班号 Flt No.</Text>
+                                <Text style={styles.inputLabel}>Flight No.</Text>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                     <TextInput
                                         style={[styles.textInput, { flex: 1 }]}
@@ -686,7 +686,7 @@ export const DualTrackForm: React.FC<Props> = ({
                 <View style={styles.row}>
                     <View style={styles.flexField}>
                         <Text style={[styles.inputLabel, fieldError('acft_type') && { color: COLORS.error }]}>
-                            机型 A/C Type *
+                            A/C Type *
                         </Text>
                         <ComboInput
                             value={shared.acftType}
@@ -701,7 +701,7 @@ export const DualTrackForm: React.FC<Props> = ({
                         <>
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>登记号 Reg No.</Text>
+                                <Text style={styles.inputLabel}>Reg No.</Text>
                                 <TextInput
                                     style={styles.textInput}
                                     value={shared.regNo}
@@ -722,10 +722,10 @@ export const DualTrackForm: React.FC<Props> = ({
                 <>
                     {/* Route */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>航段 Route</Text>
+                        <Text style={styles.sectionTitle}>Route (DEP-ARR)</Text>
                         <View style={styles.row}>
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>出发站 DEP</Text>
+                                <Text style={styles.inputLabel}>DEP</Text>
                                 <TextInput
                                     style={styles.textInput}
                                     value={flight.depIcao}
@@ -744,7 +744,7 @@ export const DualTrackForm: React.FC<Props> = ({
                             </View>
                             <Text style={styles.arrow}>→</Text>
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>到达站 ARR</Text>
+                                <Text style={styles.inputLabel}>ARR</Text>
                                 <TextInput
                                     style={styles.textInput}
                                     value={flight.arrIcao}
@@ -879,7 +879,7 @@ export const DualTrackForm: React.FC<Props> = ({
                             </View>
                             <View style={styles.timeDataCellInput}>
                                 <Text style={styles.inputLabel}>
-                                    {showNightHint ? '🌙 夜航 Night (分)' : '夜航 Night (分)'}
+                                    {showNightHint ? '🌙 Night (min)' : 'Night (min)'}
                                 </Text>
                                 <TextInput
                                     style={[styles.textInput, showNightHint && styles.nightHintInput]}
@@ -892,7 +892,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                 />
                             </View>
                             <View style={styles.timeDataCellInput}>
-                                <Text style={styles.inputLabel}>仪表 Inst (分)</Text>
+                                <Text style={styles.inputLabel}>Instrument (min)</Text>
                                 <TextInput
                                     style={styles.textInput}
                                     value={flight.instrumentRaw}
@@ -942,14 +942,14 @@ export const DualTrackForm: React.FC<Props> = ({
                             <View>
                                 <View style={styles.row}>
                                     <LandingCounter
-                                        label="昼间起飞 Day T/O"
+                                        label="Day T/O"
                                         value={flight.dayTo}
                                         onChange={v => updateFlight({ dayTo: v })}
                                         testIDBase="day-to"
                                     />
                                     <View style={styles.gap} />
                                     <LandingCounter
-                                        label="夜间起飞 Night T/O"
+                                        label="Night T/O"
                                         value={flight.nightTo}
                                         onChange={v => updateFlight({ nightTo: v })}
                                         testIDBase="night-to"
@@ -957,14 +957,14 @@ export const DualTrackForm: React.FC<Props> = ({
                                 </View>
                                 <View style={[styles.row, { marginTop: 8 }]}>
                                     <LandingCounter
-                                        label="昼间着陆 Day LDG"
+                                        label="Day LDG"
                                         value={flight.dayLdg}
                                         onChange={v => updateFlight({ dayLdg: v })}
                                         testIDBase="day-ldg"
                                     />
                                     <View style={styles.gap} />
                                     <LandingCounter
-                                        label="夜间着陆 Night LDG"
+                                        label="Night LDG"
                                         value={flight.nightLdg}
                                         onChange={v => updateFlight({ nightLdg: v })}
                                         testIDBase="night-ldg"
@@ -1059,16 +1059,16 @@ export const DualTrackForm: React.FC<Props> = ({
                         {/* ── Time buckets (all 6 fields visible, matching role highlighted) ── */}
                         <View style={styles.row}>
                             {([
-                                { key: 'picRaw', role: 'PIC', label: '机长 PIC', testID: 'input-pic', errKey: 'pic_min' },
+                                { key: 'picRaw', role: 'PIC', label: 'PIC', testID: 'input-pic', errKey: 'pic_min' },
                                 { key: 'picUsRaw', role: 'PIC_US', label: 'PIC U/S', testID: 'input-pic-us', errKey: undefined },
-                                { key: 'spicRaw', role: 'SPIC', label: '见习机长 SPIC', testID: 'input-spic', errKey: undefined },
+                                { key: 'spicRaw', role: 'SPIC', label: 'SPIC', testID: 'input-spic', errKey: undefined },
                             ] as { key: keyof FlightFields; role: CapacityRole; label: string; testID: string; errKey?: string }[]).map(({ key, role, label, testID, errKey }) => (
                                 <View key={key} style={styles.roleTimeField}>
                                     <Text style={[
                                         styles.inputLabel,
                                         flight.capacityRole === role && styles.inputLabelHighlight,
                                     ]}>
-                                        {label} (分)
+                                        {label} (min)
                                     </Text>
                                     <TextInput
                                         style={[
@@ -1088,16 +1088,16 @@ export const DualTrackForm: React.FC<Props> = ({
                         </View>
                         <View style={styles.row}>
                             {([
-                                { key: 'sicRaw', role: 'SIC', label: '副驾驶 SIC', testID: 'input-sic', errKey: undefined },
-                                { key: 'dualRaw', role: null, label: '带飞 Dual', testID: 'input-dual', errKey: undefined },
-                                { key: 'instructorRaw', role: null, label: '教员 Instructor', testID: 'input-instructor', errKey: undefined },
+                                { key: 'sicRaw', role: 'SIC', label: 'SIC', testID: 'input-sic', errKey: undefined },
+                                { key: 'dualRaw', role: null, label: 'Dual', testID: 'input-dual', errKey: undefined },
+                                { key: 'instructorRaw', role: null, label: 'Instructor', testID: 'input-instructor', errKey: undefined },
                             ] as { key: keyof FlightFields; role: CapacityRole | null; label: string; testID: string; errKey?: string }[]).map(({ key, role, label, testID }) => (
                                 <View key={key} style={styles.roleTimeField}>
                                     <Text style={[
                                         styles.inputLabel,
                                         role && flight.capacityRole === role && styles.inputLabelHighlight,
                                     ]}>
-                                        {label} (分)
+                                        {label} (min)
                                     </Text>
                                     <TextInput
                                         style={[
@@ -1149,7 +1149,7 @@ export const DualTrackForm: React.FC<Props> = ({
 
                         <View style={styles.row}>
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>模拟机编号 SIM No.</Text>
+                                <Text style={styles.inputLabel}>SIM No.</Text>
                                 <TextInput
                                     style={styles.textInput}
                                     value={sim.simNo}
@@ -1161,7 +1161,7 @@ export const DualTrackForm: React.FC<Props> = ({
                             </View>
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>FSTD 鉴定等级</Text>
+                                <Text style={styles.inputLabel}>FSTD Level</Text>
                                 <OptionPicker
                                     label=""
                                     value={sim.simCat}
@@ -1174,7 +1174,7 @@ export const DualTrackForm: React.FC<Props> = ({
 
                         <View style={styles.row}>
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>训练机构</Text>
+                                <Text style={styles.inputLabel}>Training Agency</Text>
                                 <TextInput
                                     style={styles.textInput}
                                     value={sim.trainingAgency}
@@ -1186,7 +1186,7 @@ export const DualTrackForm: React.FC<Props> = ({
                             </View>
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>训练种类 Training Type</Text>
+                                <Text style={styles.inputLabel}>Training Type</Text>
                                 <OptionPicker
                                     label=""
                                     value={sim.trainingType}
@@ -1201,7 +1201,7 @@ export const DualTrackForm: React.FC<Props> = ({
                         <Text style={[styles.sectionTitle, { marginTop: 16 }]}>训练时段</Text>
                         <View style={styles.timeAxisRow}>
                             <MaskedTimeInput
-                                label="起始"
+                                label="From"
                                 value={sim.fromRaw}
                                 onChange={v => updateSim({ fromRaw: v })}
                                 onBlur={handleSimTimeBlur}
@@ -1211,7 +1211,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                 <Text style={styles.arrow}>→</Text>
                             </View>
                             <MaskedTimeInput
-                                label="结束"
+                                label="To"
                                 value={sim.toRaw}
                                 onChange={v => updateSim({ toRaw: v })}
                                 onBlur={handleSimTimeBlur}
