@@ -494,6 +494,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [focusedInput, setFocusedInput] = useState<'email' | 'password' | null>(null);
     const [authLoading, setAuthLoading] = useState(false);
     const [authError, setAuthError] = useState<string | null>(null);
 
@@ -1073,7 +1074,11 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                         <View style={styles.authDivider} />
 
                         <TextInput
-                            style={styles.authInput}
+                            style={[
+                                styles.authInput,
+                                focusedInput === 'email' && styles.authInputFocused,
+                                Platform.OS === 'web' && { outlineStyle: 'none' } as any
+                            ]}
                             placeholder="Email"
                             placeholderTextColor={COLORS.textSecondary}
                             keyboardType="email-address"
@@ -1081,11 +1086,20 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                             autoCorrect={false}
                             value={email}
                             onChangeText={setEmail}
+                            onFocus={() => setFocusedInput('email')}
+                            onBlur={() => setFocusedInput(null)}
                             testID="input-email"
                         />
-                        <View style={[styles.authInput, styles.passwordInputWrapper]}>
+                        <View style={[
+                            styles.authInput, 
+                            styles.passwordInputWrapper,
+                            focusedInput === 'password' && styles.authInputFocused
+                        ]}>
                             <TextInput
-                                style={styles.passwordInput}
+                                style={[
+                                    styles.passwordInput,
+                                    Platform.OS === 'web' && { outlineStyle: 'none' } as any
+                                ]}
                                 placeholder="Password (min 6 chars)"
                                 placeholderTextColor={COLORS.textSecondary}
                                 secureTextEntry={!showPassword}
@@ -1093,6 +1107,8 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                                 autoCorrect={false}
                                 value={password}
                                 onChangeText={setPassword}
+                                onFocus={() => setFocusedInput('password')}
+                                onBlur={() => setFocusedInput(null)}
                                 testID="input-password"
                             />
                             <TouchableOpacity
@@ -1389,6 +1405,10 @@ const styles = StyleSheet.create({
         color: COLORS.text,
         fontSize: 15,
         marginBottom: 12,
+    },
+    authInputFocused: {
+        borderColor: COLORS.primary,
+        backgroundColor: '#15243B',
     },
     passwordInputWrapper: {
         flexDirection: 'row',
