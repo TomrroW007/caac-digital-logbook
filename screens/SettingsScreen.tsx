@@ -891,6 +891,12 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                     Filtered: {prepareExportData(logbooks, exportRecordType).length} records ·
                     {exportTimezone === 'LT_BEIJING' ? ' Showing Beijing Time (UTC+8)' : ' Showing UTC'}
                 </Text>
+                
+                <View style={{ marginTop: 12, padding: 8, backgroundColor: 'rgba(56, 189, 248, 0.1)', borderRadius: 6, borderWidth: 1, borderColor: 'rgba(56, 189, 248, 0.2)' }}>
+                    <Text style={{ fontSize: 11, color: '#38BDF8', lineHeight: 16 }}>
+                        <Ionicons name="information-circle" size={12} /> Per CAAC and CCAR-121 fatigue management audit requirements, all exported flight logs must use a strictly continuous timeline (UTC or Beijing LT) to ensure legal validity. Local dynamic timezones are disabled for compliance.
+                    </Text>
+                </View>
             </View>
 
             {/* ── 导出选项 ── */}
