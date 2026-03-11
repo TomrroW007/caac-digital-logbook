@@ -705,6 +705,8 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 setShowAuthModal(false);
                 setEmail('');
                 setPassword('');
+                // Automatically trigger sync on successful login
+                handleSync();
             }
         } finally {
             setAuthLoading(false);

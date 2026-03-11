@@ -29,7 +29,7 @@ import {
 import { minutesToHHMM } from '../utils/TimeCalculator';
 import { readSyncStatus, type SyncStatus } from '../utils/SyncService';
 import { subscribeToAuthChanges } from '../utils/SyncService';
-import { isSupabaseConfigured } from '../utils/supabaseClient';
+import { isSupabaseConfigured, supabase } from '../utils/supabaseClient';
 import SyncStatusCapsule from '../components/shared/SyncStatusCapsule';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -65,6 +65,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
 
     // ── 云同步状态指示器（UI/UX: 每次屏幕联焦时刷新）──
     const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: 'local' });
+    const [isSignedIn, setIsSignedIn] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
@@ -79,7 +80,14 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
     // ── Auth 状态订阅：登录/登出后实时刷新 SyncStatus（不依赖屏幕切换）──
     useEffect(() => {
         if (!isSupabaseConfigured()) return;
+        
+        // Initial check
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setIsSignedIn(!!session);
+        });
+
         const unsubscribe = subscribeToAuthChanges(session => {
+            setIsSignedIn(!!session);
             // session 为 null → 已登出，重置到 local 状态
             setSyncStatus(session ? { state: 'local' } : { state: 'local' });
             // 无论如何都立即刷新最新的持久化状态
@@ -148,7 +156,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                         <Text style={styles.title}>✈ Pilot Logbook</Text>
                         <Text style={styles.subtitle}>Digital Pilot Logbook</Text>
                     </View>
-                    <SyncStatusCapsule status={syncStatus} />
+                    <SyncStatusCapsule status={syncStatus} isSignedIn={isSignedIn} />
                 </View>
 
                 {/* 90-Day Experience Card — PRD §4.2 dual-row layout */}

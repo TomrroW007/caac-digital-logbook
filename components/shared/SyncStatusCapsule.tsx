@@ -17,6 +17,7 @@ import type { SyncStatus } from '../../utils/SyncService';
 
 interface Props {
     status: SyncStatus;
+    isSignedIn: boolean;
 }
 
 const COLORS = {
@@ -24,9 +25,10 @@ const COLORS = {
     warning: '#F59E0B',
     error: '#EF4444',
     muted: '#9CA3AF',
+    ready: '#3B82F6',
 };
 
-const SyncStatusCapsule: React.FC<Props> = ({ status }) => {
+const SyncStatusCapsule: React.FC<Props> = ({ status, isSignedIn }) => {
     let dot: string;
     let label: string;
     let color: string;
@@ -52,10 +54,16 @@ const SyncStatusCapsule: React.FC<Props> = ({ status }) => {
                 label = 'Sync Error';
                 color = COLORS.error;
                 break;
-            default: // 'local' — configured but not signed in
-                dot = '⬜';
-                label = 'Not Signed In';
-                color = COLORS.muted;
+            default: // 'local' — configured but not signed in OR signed in but no sync yet
+                if (isSignedIn) {
+                    dot = '☁️';
+                    label = 'Cloud Ready';
+                    color = COLORS.ready;
+                } else {
+                    dot = '⬜';
+                    label = 'Not Signed In';
+                    color = COLORS.muted;
+                }
         }
     }
 
