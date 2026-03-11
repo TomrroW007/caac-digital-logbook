@@ -11,7 +11,7 @@
  * Version the CACHE_NAME to force a cache bust on updates.
  */
 
-const CACHE_NAME = 'pilot-logbook-v1';
+const CACHE_NAME = 'pilot-logbook-v2';
 
 // Pre-cache the app shell on install
 self.addEventListener('install', (event) => {

@@ -1,0 +1,14 @@
+# ─── Cloudflare Pages _redirects 配置 ──────────────────────────────────────
+#
+# 本文件配置 URL 重定向规则，确保 React Router SPA 路由正常工作。
+# Cloudflare Pages 会自动按优先级顺序应用这些规则。
+#
+# 参考: https://developers.cloudflare.com/pages/configuration/redirects/
+# ───────────────────────────────────────────────────────────────────────────
+
+# ─── SPA 路由回退：所有不存在的路由回退到 index.html────────────────────────
+# Cloudflare Pages 只在实际文件不存在时才触发 _redirects 规则。
+# 但为安全起见，仍然仅对非文件路径做 SPA 回退。
+# 注意：Cloudflare Pages 优先匹配 static files，此规则仅兜底。
+/*
+  /index.html 200
