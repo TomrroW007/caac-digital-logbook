@@ -55,12 +55,12 @@ const TimelineScreenBase: React.FC<TimelineProps> = ({ logbooks }) => {
     // ── Soft-delete: long-press → Alert → WatermelonDB write ──
     const handleDelete = (record: LogbookRecord) => {
         Alert.alert(
-            '删除记录',
-            '确定要删除该条记录吗？删除后该记录将不再纳入 Dashboard 统计与导出报表。',
+            'Delete Record',
+            'Are you sure you want to delete this record? It will be excluded from Dashboard stats and exports.',
             [
-                { text: '取消', style: 'cancel' },
+                { text: 'Cancel', style: 'cancel' },
                 {
-                    text: '确认删除',
+                    text: 'Delete',
                     style: 'destructive',
                     onPress: () => {
                         database.write(async () => {
@@ -119,16 +119,16 @@ const TimelineScreenBase: React.FC<TimelineProps> = ({ logbooks }) => {
                 ListHeaderComponent={
                     logbooks.length > 0 ? (
                         <Text style={styles.hint}>
-                            💡 长按单条记录可删除
+                            💡 Long-press a record to delete
                         </Text>
                     ) : null
                 }
                 ListEmptyComponent={
                     <View style={styles.empty}>
                         <Text style={styles.emptyIcon}>📋</Text>
-                        <Text style={styles.emptyTitle}>暂无飞行记录</Text>
+                        <Text style={styles.emptyTitle}>No Records Yet</Text>
                         <Text style={styles.emptySubtitle}>
-                            点击「+ 新增记录」按钮开始记录您的第一段飞行经历。
+                            Tap "+ Add Record" on the Dashboard to log your first flight.
                         </Text>
                     </View>
                 }
