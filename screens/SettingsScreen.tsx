@@ -493,6 +493,8 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
     const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [focusedInput, setFocusedInput] = useState<'email' | 'password' | null>(null);
     const [authLoading, setAuthLoading] = useState(false);
     const [authError, setAuthError] = useState<string | null>(null);
 
@@ -692,8 +694,17 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
     // ── 云端同步 ──────────────────────────────────────────────────────────────
     const handleSignIn = async () => {
-        if (!email.trim() || !password) {
-            setAuthError('请输入邮箱和密码');
+        if (!email.trim()) {
+            setAuthError('请输入邮箱');
+            return;
+        }
+        if (!password) {
+            setAuthError('请输入密码');
+            return;
+        }
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!emailRegex.test(email.trim())) {
+            setAuthError('邮箱格式不正确');
             return;
         }
         setAuthLoading(true);
@@ -715,8 +726,17 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
     };
 
     const handleSignUp = async () => {
-        if (!email.trim() || !password) {
-            setAuthError('请输入邮箱和密码');
+        if (!email.trim()) {
+            setAuthError('请输入邮箱');
+            return;
+        }
+        if (!password) {
+            setAuthError('请输入密码');
+            return;
+        }
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!emailRegex.test(email.trim())) {
+            setAuthError('邮箱格式不正确');
             return;
         }
         if (password.length < 6) {
@@ -1056,7 +1076,11 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                         <View style={styles.authDivider} />
 
                         <TextInput
-                            style={styles.authInput}
+                            style={[
+                                styles.authInput,
+                                focusedInput === 'email' && styles.authInputFocused,
+                                Platform.OS === 'web' && { outlineStyle: 'none' } as any
+                            ]}
                             placeholder="Email"
                             placeholderTextColor={COLORS.textSecondary}
                             keyboardType="email-address"
@@ -1064,17 +1088,39 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                             autoCorrect={false}
                             value={email}
                             onChangeText={setEmail}
+                            onFocus={() => setFocusedInput('email')}
+                            onBlur={() => setFocusedInput(null)}
                             testID="input-email"
                         />
-                        <TextInput
-                            style={styles.authInput}
-                            placeholder="Password (min 6 chars)"
-                            placeholderTextColor={COLORS.textSecondary}
-                            secureTextEntry
-                            value={password}
-                            onChangeText={setPassword}
-                            testID="input-password"
-                        />
+                        <View style={[
+                            styles.authInput, 
+                            styles.passwordInputWrapper,
+                            focusedInput === 'password' && styles.authInputFocused
+                        ]}>
+                            <TextInput
+                                style={[
+                                    styles.passwordInput,
+                                    Platform.OS === 'web' && { outlineStyle: 'none' } as any
+                                ]}
+                                placeholder="Password (min 6 chars)"
+                                placeholderTextColor={COLORS.textSecondary}
+                                secureTextEntry={!showPassword}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                value={password}
+                                onChangeText={setPassword}
+                                onFocus={() => setFocusedInput('password')}
+                                onBlur={() => setFocusedInput(null)}
+                                testID="input-password"
+                            />
+                            <TouchableOpacity
+                                style={styles.eyeIconContainer}
+                                onPress={() => setShowPassword(p => !p)}
+                                testID="btn-toggle-password-visibility"
+                            >
+                                <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={COLORS.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
 
                         {authError && (
                             <View style={styles.authErrorBox}>
@@ -1361,6 +1407,25 @@ const styles = StyleSheet.create({
         color: COLORS.text,
         fontSize: 15,
         marginBottom: 12,
+    },
+    authInputFocused: {
+        borderColor: COLORS.primary,
+        backgroundColor: '#15243B',
+    },
+    passwordInputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 0,
+        paddingRight: 8,
+    },
+    passwordInput: {
+        flex: 1,
+        color: COLORS.text,
+        fontSize: 15,
+        paddingVertical: 14,
+    },
+    eyeIconContainer: {
+        padding: 8,
     },
     authErrorBox: {
         backgroundColor: '#2A0E0E',
