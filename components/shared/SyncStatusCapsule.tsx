@@ -34,7 +34,7 @@ const SyncStatusCapsule: React.FC<Props> = ({ status }) => {
     if (!isSupabaseConfigured()) {
         dot = '⬜';
         label = 'Local';
-        color = COLORS.muted;
+        color = COLORS.muted; 
     } else {
         switch (status.state) {
             case 'synced':
