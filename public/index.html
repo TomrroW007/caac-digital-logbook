@@ -1,70 +1,75 @@
 <!DOCTYPE html>
 <html lang="%LANG_ISO_CODE%">
-  <head>
-    <meta charset="utf-8" />
-    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <title>%WEB_TITLE%</title>
 
-    <!-- PWA: Web App Manifest -->
-    <link rel="manifest" href="/manifest.json" />
+<head>
+  <meta charset="utf-8" />
+  <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <title>%WEB_TITLE%</title>
 
-    <!-- PWA: Theme & Status Bar -->
-    <meta name="theme-color" content="#0A0F1E" />
+  <!-- PWA: Web App Manifest -->
+  <link rel="manifest" href="/manifest.json" />
 
-    <!-- Favicon: 标准 favicon 引用 -->
-    <link rel="icon" type="image/png" href="/favicon.png" />
+  <!-- PWA: Theme & Status Bar -->
+  <meta name="theme-color" content="#0A0F1E" />
 
-    
-    <!-- PWA: iOS Safari "Add to Home Screen" -->
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Pilot" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
+  <!-- Favicon: 标准 favicon 引用 -->
+  <link rel="icon" type="image/png" href="/favicon.png" />
 
-    <!-- PWA: Service Worker Registration -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function () {
-          navigator.serviceWorker.register('/service-worker.js').catch(function (err) {
-            console.warn('[SW] Registration failed:', err);
-          });
+
+  <!-- PWA: iOS Safari "Add to Home Screen" -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Pilot" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+
+  <!-- PWA: Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/service-worker.js').catch(function (err) {
+          console.warn('[SW] Registration failed:', err);
         });
-      }
-    </script>
+      });
+    }
+  </script>
 
-    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
-    <style id="expo-reset">
-      /* These styles make the body full-height */
-      html,
-      body {
-        height: 100%;
-      }
-      /* These styles disable body scrolling if you are using <ScrollView> */
-      body {
-        overflow: hidden;
-      }
-      /* These styles make the root element full-height */
-      #root {
-        display: flex;
-        height: 100%;
-        flex: 1;
-      }
-      /* Hide native browser password reveal eye icon (Edge/IE) */
-      input::-ms-reveal,
-      input::-ms-clear {
-        display: none !important;
-      }
-    </style>
-  </head>
+  <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+  <style id="expo-reset">
+    /* These styles make the body full-height */
+    html,
+    body {
+      height: 100%;
+    }
 
-  <body>
-    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
-    <noscript>
-      You need to enable JavaScript to run this app.
-    </noscript>
-    <!-- The root element for your Expo app. -->
-    <div id="root"></div>
-  </body>
+    /* These styles disable body scrolling if you are using <ScrollView> */
+    body {
+      overflow: hidden;
+    }
+
+    /* These styles make the root element full-height */
+    #root {
+      display: flex;
+      height: 100%;
+      flex: 1;
+    }
+
+    /* Hide native browser password reveal eye icon (Edge/IE) */
+    input::-ms-reveal,
+    input::-ms-clear {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+  <noscript>
+    You need to enable JavaScript to run this app.
+  </noscript>
+  <!-- The root element for your Expo app. -->
+  <div id="root"></div>
+</body>
+
 </html>
