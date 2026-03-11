@@ -95,4 +95,22 @@ export const isSupabaseConfigured = (): boolean => {
     return true;
 };
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// 仅在 URL/Key 均有效时才初始化 client；否则导出一个惰性抛错的 Proxy，
+// 防止模块加载阶段因空串导致 "supabaseUrl is required" 崩溃整个应用。
+export const supabase = isSupabaseConfigured()
+    ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : (new Proxy({} as ReturnType<typeof createClient>, {
+        get(_t, prop) {
+            // auth 对象需要特殊处理：返回带 onAuthStateChange stub 的对象
+            if (prop === 'auth') {
+                return {
+                    getUser: async () => ({ data: { user: null }, error: new Error('Supabase 未配置') }),
+                    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+                    signInWithPassword: async () => ({ data: null, error: new Error('Supabase 未配置') }),
+                    signOut: async () => ({ error: null }),
+                };
+            }
+            // 其余属性返回一个 async 函数，始终 reject
+            return () => Promise.reject(new Error(`Supabase 未配置，无法调用 ${String(prop)}`));
+        },
+    }));
