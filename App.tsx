@@ -69,7 +69,7 @@ export default function App() {
                         <Stack.Screen
                             name="Dashboard"
                             component={DashboardScreen}
-                            options={{ title: '✈ Pilot Logbook', headerShown: true }}
+                            options={{ title: 'Pilot Logbook', headerShown: true }}
                         />
                         <Stack.Screen
                             name="Timeline"

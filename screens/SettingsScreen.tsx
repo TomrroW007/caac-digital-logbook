@@ -930,9 +930,9 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 disabled={exportingPdf || exportingExcel}
                 testID="btn-export-excel"
             >
-                <Text style={styles.exportIcon}>📊</Text>
+                <Ionicons name="bar-chart-outline" size={28} color={COLORS.success} style={{ marginRight: 16 }} />
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>📊 Export Raw Excel Data</Text>
+                    <Text style={styles.exportTitle}>Export Raw Excel Data</Text>
                     <Text style={styles.exportDesc}>
                         For personal backup and desktop analysis. Compatible with WPS / Microsoft Excel.
                     </Text>
@@ -978,7 +978,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                         onPress={() => { setAuthError(null); setShowAuthModal(true); }}
                         testID="btn-open-auth-modal"
                     >
-                        <Text style={styles.exportIcon}>🔐</Text>
+                        <Ionicons name="lock-closed-outline" size={28} color={COLORS.warning} style={{ marginRight: 16 }} />
                         <View style={styles.exportInfo}>
                             <Text style={styles.exportTitle}>Enable Cloud Sync — Sign In / Sign Up</Text>
                             <Text style={styles.exportDesc}>
@@ -996,10 +996,10 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 disabled={anyBusy || !session}
                 testID="btn-cloud-sync"
             >
-                <Text style={styles.exportIcon}>☁️</Text>
+                <Ionicons name="cloud-outline" size={28} color={isSupabaseConfigured() ? COLORS.primary : COLORS.textSecondary} style={{ marginRight: 16 }} />
                 <View style={styles.exportInfo}>
                     <Text style={styles.exportTitle}>
-                        ☁️ {isSupabaseConfigured() ? 'Sync to Cloud Now' : 'Cloud Sync (Not Configured)'}
+                        {isSupabaseConfigured() ? 'Sync to Cloud Now' : 'Cloud Sync (Not Configured)'}
                     </Text>
                     <Text style={styles.exportDesc}>
                         {isSupabaseConfigured()

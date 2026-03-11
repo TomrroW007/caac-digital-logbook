@@ -35,7 +35,7 @@ const SyncStatusCapsule: React.FC<Props> = ({ status, isSignedIn }) => {
     let color: string;
 
     if (!isSupabaseConfigured()) {
-        dot = <Ionicons name="ellipse-outline" size={12} color={COLORS.muted} />;
+        dot = <Ionicons name="cloud-offline-outline" size={14} color={COLORS.muted} />;
         label = 'Local';
         color = COLORS.muted;
     } else {
@@ -61,7 +61,7 @@ const SyncStatusCapsule: React.FC<Props> = ({ status, isSignedIn }) => {
                     label = 'Cloud Ready';
                     color = COLORS.ready;
                 } else {
-                    dot = <Ionicons name="ellipse-outline" size={12} color={COLORS.muted} />;
+                    dot = <Ionicons name="cloud-offline-outline" size={14} color={COLORS.muted} />;
                     label = 'Not Signed In';
                     color = COLORS.muted;
                 }

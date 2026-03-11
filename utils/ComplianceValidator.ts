@@ -393,7 +393,7 @@ export function validate90DayExperience(
         dayTo, nightTo, totalTo,
         dayLdg, nightLdg, totalLdg,
         alertLevel: 'ok',
-        alertMessage: `✅ 近 90 天起飞 ${totalTo} 次、着陆 ${totalLdg} 次，近期飞行经历符合要求。`,
+        alertMessage: `近 90 天起飞 ${totalTo} 次、着陆 ${totalLdg} 次，近期飞行经历符合要求。`,
     };
 }
 

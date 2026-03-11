@@ -23,6 +23,7 @@ import {
     StyleSheet,
     Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 // localStorage key used to remember the user dismissed the prompt
 const DISMISSED_KEY = 'pwa_install_prompt_dismissed';
@@ -66,7 +67,7 @@ export const PwaInstallPrompt: React.FC = () => {
     return (
         <View style={styles.container}>
             <View style={styles.card}>
-                <Text style={styles.icon}>✈</Text>
+                <Ionicons name="airplane" size={28} color="#F9FAFB" />
                 <View style={styles.body}>
                     <Text style={styles.title}>Get the Best Offline Experience</Text>
                     <Text style={styles.desc}>

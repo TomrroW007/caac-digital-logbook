@@ -31,6 +31,7 @@ import { readSyncStatus, type SyncStatus } from '../utils/SyncService';
 import { subscribeToAuthChanges } from '../utils/SyncService';
 import { isSupabaseConfigured, supabase } from '../utils/supabaseClient';
 import SyncStatusCapsule from '../components/shared/SyncStatusCapsule';
+import { MaterialIcons } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -171,7 +172,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
 
                     {/* Row 1: Takeoff totals (core) + day/night sub-labels */}
                     <View style={styles.expRow}>
-                        <Ionicons name="arrow-up-circle-outline" size={28} color={COLORS.textSecondary} style={{ marginRight: 12 }} />
+                        <MaterialIcons name="flight-takeoff" size={28} color={COLORS.textSecondary} style={{ marginRight: 12 }} />
                         <View style={styles.expMain}>
                             <Text style={[styles.expTotal, { color: alertTheme.color }]}>
                                 {experienceReport.totalTo}
@@ -187,7 +188,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
 
                     {/* Row 2: Landing totals (core) + day/night sub-labels */}
                     <View style={styles.expRow}>
-                        <Ionicons name="arrow-down-circle-outline" size={28} color={COLORS.textSecondary} style={{ marginRight: 12 }} />
+                        <MaterialIcons name="flight-land" size={28} color={COLORS.textSecondary} style={{ marginRight: 12 }} />
                         <View style={styles.expMain}>
                             <Text style={[styles.expTotal, { color: alertTheme.color }]}>
                                 {experienceReport.totalLdg}
@@ -209,7 +210,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                         <Text style={styles.totalUnit}>All Time</Text>
                     </View>
                     <View style={[styles.totalCard, { borderColor: COLORS.sim }]}>
-                        <Ionicons name="desktop-outline" size={28} color={COLORS.sim} style={{ marginBottom: 8 }} />
+                        <Ionicons name="desktop" size={28} color={COLORS.sim} style={{ marginBottom: 8 }} />
                         <Text style={styles.totalLabel}>Simulator</Text>
                         <Text style={styles.totalValue}>{minutesToHHMM(totalSimMin)}</Text>
                         <Text style={styles.totalUnit}>Total Time</Text>
