@@ -702,7 +702,8 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             setAuthError('请输入密码');
             return;
         }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!emailRegex.test(email.trim())) {
             setAuthError('邮箱格式不正确');
             return;
         }
@@ -733,7 +734,8 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             setAuthError('请输入密码');
             return;
         }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!emailRegex.test(email.trim())) {
             setAuthError('邮箱格式不正确');
             return;
         }
