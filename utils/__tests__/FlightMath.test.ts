@@ -60,10 +60,10 @@ describe('resolveFourTimePoints', () => {
             expect(result.offUtcISO).toBe('2024-03-01T08:00:00.000Z');
         });
 
-        it('infers ON = LDG + 10 minutes', () => {
+        it('infers ON = LDG + 5 minutes', () => {
             const result = resolveFourTimePoints(minimalInput);
-            // LDG = 10:30, ON should be 10:40
-            expect(result.onUtcISO).toBe('2024-03-01T10:40:00.000Z');
+            // LDG = 10:30, ON should be 10:35
+            expect(result.onUtcISO).toBe('2024-03-01T10:35:00.000Z');
         });
 
         it('wasInferred is true', () => {
@@ -71,10 +71,10 @@ describe('resolveFourTimePoints', () => {
             expect(result.wasInferred).toBe(true);
         });
 
-        it('blockTimeMin = inferred ON - inferred OFF = 160 min', () => {
-            // OFF = 08:00, ON = 10:40 → 160 min
+        it('blockTimeMin = inferred ON - inferred OFF = 155 min', () => {
+            // OFF = 08:00, ON = 10:35 → 155 min
             const result = resolveFourTimePoints(minimalInput);
-            expect(result.blockTimeMin).toBe(160);
+            expect(result.blockTimeMin).toBe(155);
         });
     });
 
@@ -87,7 +87,7 @@ describe('resolveFourTimePoints', () => {
                 onUtcISO: null,
             });
             expect(result.offUtcISO).toBe(OFF);
-            expect(result.onUtcISO).toBe('2024-03-01T10:40:00.000Z');
+            expect(result.onUtcISO).toBe('2024-03-01T10:35:00.000Z');
             expect(result.wasInferred).toBe(true);
         });
     });

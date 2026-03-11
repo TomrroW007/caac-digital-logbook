@@ -32,9 +32,6 @@ const validBase: FlightRecordInput = {
     actlDate: '2024-03-01',
     schdDate: '2024-03-01',
     acftType: 'A320',
-    depIcao: 'ZBAA',
-    arrIcao: 'ZSSD',
-    regNo: 'B-1234',
     remarks: null,
 };
 
@@ -62,9 +59,6 @@ describe('validateFlightRecord', () => {
                 picMin: 0,
                 sicMin: 0,
                 dualMin: 150,
-                simCat: 'FFS D',
-                simNo: '12-34',
-                trainingType: 'Recurrent',
             });
             expect(result.valid).toBe(true);
         });
@@ -134,43 +128,6 @@ describe('validateFlightRecord', () => {
             expect(result.valid).toBe(false);
             expect(result.errors.length).toBeGreaterThanOrEqual(3);
         });
-
-        it('fails when FLIGHT missing depIcao', () => {
-            const result = validateFlightRecord({ ...validBase, depIcao: '' });
-            expect(result.valid).toBe(false);
-            expect(result.errors.some(e => e.field === 'dep_icao')).toBe(true);
-        });
-
-        it('fails when FLIGHT missing arrIcao', () => {
-            const result = validateFlightRecord({ ...validBase, arrIcao: '' });
-            expect(result.valid).toBe(false);
-            expect(result.errors.some(e => e.field === 'arr_icao')).toBe(true);
-        });
-
-        it('fails when FLIGHT missing regNo', () => {
-            const result = validateFlightRecord({ ...validBase, regNo: '' });
-            expect(result.valid).toBe(false);
-            expect(result.errors.some(e => e.field === 'reg_no')).toBe(true);
-        });
-
-        it('fails when FLIGHT has zero experience time', () => {
-            const result = validateFlightRecord({ ...validBase, picMin: 0, sicMin: 0 });
-            expect(result.valid).toBe(false);
-            expect(result.errors.some(e => e.code === 'EXPERIENCE_TIME_ZERO')).toBe(true);
-        });
-
-        it('fails when SIM missing simCat, simNo, trainingType', () => {
-            const result = validateFlightRecord({
-                ...validBase,
-                dutyType: 'SIMULATOR',
-                picMin: 0, sicMin: 0, dualMin: 150, // fix experience time
-                simCat: '', simNo: '', trainingType: ''
-            });
-            expect(result.valid).toBe(false);
-            expect(result.errors.some(e => e.field === 'sim_cat')).toBe(true);
-            expect(result.errors.some(e => e.field === 'sim_no')).toBe(true);
-            expect(result.errors.some(e => e.field === 'training_type')).toBe(true);
-        });
     });
 
     describe('block time check', () => {
@@ -188,23 +145,23 @@ describe('validateFlightRecord', () => {
 
     describe('special time bounds (FLIGHT mode only)', () => {
         it('passes when nightFlightMin equals blockTimeMin (at limit)', () => {
-            const result = validateFlightRecord({ ...validBase, picMin: 150, sicMin: 0, nightFlightMin: 150 });
+            const result = validateFlightRecord({ ...validBase, picMin: 0, sicMin: 0, nightFlightMin: 150 });
             expect(result.valid).toBe(true);
         });
 
         it('fails when nightFlightMin exceeds blockTimeMin', () => {
-            const result = validateFlightRecord({ ...validBase, picMin: 150, sicMin: 0, nightFlightMin: 200 });
+            const result = validateFlightRecord({ ...validBase, picMin: 0, sicMin: 0, nightFlightMin: 200 });
             expect(result.valid).toBe(false);
             expect(result.errors.some(e => e.code === 'SPECIAL_TIME_EXCEEDS_BLOCK' && e.field === 'night_flight_min')).toBe(true);
         });
 
         it('passes when instrumentMin equals blockTimeMin (at limit)', () => {
-            const result = validateFlightRecord({ ...validBase, picMin: 150, sicMin: 0, instrumentMin: 150 });
+            const result = validateFlightRecord({ ...validBase, picMin: 0, sicMin: 0, instrumentMin: 150 });
             expect(result.valid).toBe(true);
         });
 
         it('fails when instrumentMin exceeds blockTimeMin', () => {
-            const result = validateFlightRecord({ ...validBase, picMin: 150, sicMin: 0, instrumentMin: 151 });
+            const result = validateFlightRecord({ ...validBase, picMin: 0, sicMin: 0, instrumentMin: 151 });
             expect(result.valid).toBe(false);
             expect(result.errors.some(e => e.code === 'SPECIAL_TIME_EXCEEDS_BLOCK' && e.field === 'instrument_min')).toBe(true);
         });

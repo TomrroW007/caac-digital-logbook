@@ -46,12 +46,12 @@ export class AppErrorBoundary extends Component<Props, State> {
             return (
                 <View style={styles.container}>
                     <Text style={styles.icon}>⚠️</Text>
-                    <Text style={styles.title}>Something Went Wrong</Text>
+                    <Text style={styles.title}>应用遇到了问题</Text>
                     <Text style={styles.message}>
-                        {this.state.error?.message ?? 'An unknown error occurred'}
+                        {this.state.error?.message ?? '发生未知错误'}
                     </Text>
                     <TouchableOpacity style={styles.button} onPress={this.handleReset}>
-                        <Text style={styles.buttonText}>Reload</Text>
+                        <Text style={styles.buttonText}>重新加载</Text>
                     </TouchableOpacity>
                 </View>
             );
