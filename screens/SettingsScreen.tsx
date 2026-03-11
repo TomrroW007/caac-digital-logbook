@@ -40,6 +40,7 @@ if (Platform.OS !== 'web') {
     Sharing = require('expo-sharing');
     FileSystem = require('expo-file-system');
 }
+import { Ionicons } from '@expo/vector-icons';
 import { Q } from '@nozbe/watermelondb';
 import withObservables from '@nozbe/with-observables';
 import * as XLSX from 'xlsx';
@@ -781,14 +782,14 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             const status = await syncWithCloud();
             if (status.state === 'synced') {
                 const atStr = new Date(status.at).toLocaleString('zh-CN');
-                setSyncMsg(`✅ 同步成功 · ${atStr}`);
+                setSyncMsg(`Success · ${atStr}`);
                 crossAlert('云同步成功', `数据已安全备份至云端。\n同步时间：${atStr}`);
             } else if (status.state === 'error') {
-                setSyncMsg(`❌ 同步失败`);
+                setSyncMsg(`Error: Sync failed`);
                 crossAlert('云同步失败', status.message);
             }
         } catch (err) {
-            setSyncMsg('❌ 同步异常');
+            setSyncMsg('Error: Sync exception');
             crossAlert('云同步异常', err instanceof Error ? err.message : '未知错误');
         } finally {
             setSyncing(false);
@@ -810,9 +811,9 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 disabled={anyBusy}
                 testID="btn-download-template"
             >
-                <Text style={styles.exportIcon}>📥</Text>
+                <Ionicons name="download-outline" size={28} color={COLORS.accent} style={{ marginRight: 16 }} />
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>📥 Download Import Template</Text>
+                    <Text style={styles.exportTitle}>Download Import Template</Text>
                     <Text style={styles.exportDesc}>
                         Download blank .xlsx template with column headers and examples for bulk import.
                     </Text>
@@ -832,9 +833,9 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 disabled={anyBusy}
                 testID="btn-import-excel"
             >
-                <Text style={styles.exportIcon}>📤</Text>
+                <Ionicons name="cloud-upload-outline" size={28} color={COLORS.warning} style={{ marginRight: 16 }} />
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>📤 Import Historical Records</Text>
+                    <Text style={styles.exportTitle}>Import Historical Records</Text>
                     <Text style={styles.exportDesc}>
                         Batch import from template .xlsx. Auto-deduplication included.
                     </Text>
@@ -902,9 +903,9 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 disabled={exportingPdf || exportingExcel}
                 testID="btn-export-pdf"
             >
-                <Text style={styles.exportIcon}>📄</Text>
+                <Ionicons name="document-text-outline" size={28} color={COLORS.primary} style={{ marginRight: 16 }} />
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>📄 Export Standard PDF Report</Text>
+                    <Text style={styles.exportTitle}>Export Standard PDF Report</Text>
                     <Text style={styles.exportDesc}>
                         Compliant standard format with instructor signature fields. Print-ready for audit.
                     </Text>
@@ -1010,9 +1011,9 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                     {syncMsg && (
                         <Text style={[
                             styles.exportCount,
-                            { color: syncMsg.startsWith('✅') ? COLORS.success : COLORS.error },
+                            { color: syncMsg.startsWith('Success') ? COLORS.success : COLORS.error, marginTop: 4 },
                         ]}>
-                            {syncMsg}
+                            {syncMsg.startsWith('Success') ? <Ionicons name="checkmark-circle" size={12} /> : <Ionicons name="close-circle" size={12} />} {syncMsg}
                         </Text>
                     )}
                 </View>
@@ -1037,7 +1038,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                     <View style={styles.modalCard}>
                         {/* Header */}
                         <Text style={styles.modalTitle}>
-                            {authMode === 'signin' ? '🔐 Sign In' : '📝 Create Account'}
+                            {authMode === 'signin' ? <><Ionicons name="lock-closed-outline" size={20} />{' Sign In'}</> : <><Ionicons name="person-add-outline" size={20} />{' Create Account'}</>}
                         </Text>
                         <Text style={styles.authHint}>
                             {authMode === 'signin'
@@ -1071,7 +1072,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
                         {authError && (
                             <View style={styles.authErrorBox}>
-                                <Text style={styles.authErrorText}>⚠️ {authError}</Text>
+                                <Text style={styles.authErrorText}><Ionicons name="warning" size={14} /> {authError}</Text>
                             </View>
                         )}
 

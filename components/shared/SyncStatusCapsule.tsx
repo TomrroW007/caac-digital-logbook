@@ -11,6 +11,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { isSupabaseConfigured } from '../../utils/supabaseClient';
 import type { SyncStatus } from '../../utils/SyncService';
@@ -29,38 +30,38 @@ const COLORS = {
 };
 
 const SyncStatusCapsule: React.FC<Props> = ({ status, isSignedIn }) => {
-    let dot: string;
+    let dot: React.ReactNode;
     let label: string;
     let color: string;
 
     if (!isSupabaseConfigured()) {
-        dot = '⬜';
+        dot = <Ionicons name="ellipse-outline" size={12} color={COLORS.muted} />;
         label = 'Local';
         color = COLORS.muted;
     } else {
         switch (status.state) {
             case 'synced':
-                dot = '🟩';
+                dot = <Ionicons name="cloud-done" size={14} color={COLORS.success} />;
                 label = 'Synced';
                 color = COLORS.success;
                 break;
             case 'syncing':
-                dot = '🟨';
+                dot = <Ionicons name="sync" size={14} color={COLORS.warning} />;
                 label = 'Syncing…';
                 color = COLORS.warning;
                 break;
             case 'error':
-                dot = '🟥';
+                dot = <Ionicons name="warning" size={14} color={COLORS.error} />;
                 label = 'Sync Error';
                 color = COLORS.error;
                 break;
             default: // 'local' — configured but not signed in OR signed in but no sync yet
                 if (isSignedIn) {
-                    dot = '☁️';
+                    dot = <Ionicons name="cloud-outline" size={14} color={COLORS.ready} />;
                     label = 'Cloud Ready';
                     color = COLORS.ready;
                 } else {
-                    dot = '⬜';
+                    dot = <Ionicons name="ellipse-outline" size={12} color={COLORS.muted} />;
                     label = 'Not Signed In';
                     color = COLORS.muted;
                 }
@@ -69,7 +70,7 @@ const SyncStatusCapsule: React.FC<Props> = ({ status, isSignedIn }) => {
 
     return (
         <View style={styles.capsule}>
-            <Text style={styles.dot}>{dot}</Text>
+            {dot}
             <Text style={[styles.label, { color }]}>{label}</Text>
         </View>
     );
@@ -82,7 +83,6 @@ const styles = StyleSheet.create({
         paddingLeft: 12,
         paddingTop: 2,
     },
-    dot: { fontSize: 14, lineHeight: 20 },
     label: { fontSize: 10, fontWeight: '600', marginTop: 2 },
 });
 

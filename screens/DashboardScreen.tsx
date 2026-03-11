@@ -31,6 +31,7 @@ import { readSyncStatus, type SyncStatus } from '../utils/SyncService';
 import { subscribeToAuthChanges } from '../utils/SyncService';
 import { isSupabaseConfigured, supabase } from '../utils/supabaseClient';
 import SyncStatusCapsule from '../components/shared/SyncStatusCapsule';
+import { Ionicons } from '@expo/vector-icons';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
 
@@ -153,7 +154,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
-                        <Text style={styles.title}>✈ Pilot Logbook</Text>
+                        <Text style={styles.title}><Ionicons name="airplane" size={24} /> Pilot Logbook</Text>
                         <Text style={styles.subtitle}>Digital Pilot Logbook</Text>
                     </View>
                     <SyncStatusCapsule status={syncStatus} isSignedIn={isSignedIn} />
@@ -162,7 +163,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                 {/* 90-Day Experience Card — PRD §4.2 dual-row layout */}
                 <View style={[styles.alertCard, { borderColor: alertTheme.color, backgroundColor: alertTheme.bg }]}>
                     <Text style={[styles.cardTitle, { color: alertTheme.color }]}>
-                        {experienceReport.alertLevel === 'ok' ? '✅' : experienceReport.alertLevel === 'yellow' ? '⚠️' : '🚫'} 90-Day Currency
+                        {experienceReport.alertLevel === 'ok' ? <Ionicons name="checkmark-circle" size={14} /> : experienceReport.alertLevel === 'yellow' ? <Ionicons name="warning" size={14} /> : <Ionicons name="close-circle" size={14} />} 90-Day Currency
                     </Text>
                     <Text style={styles.cardSubtitle}>
                         {experienceReport.alertMessage}
@@ -170,7 +171,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
 
                     {/* Row 1: Takeoff totals (core) + day/night sub-labels */}
                     <View style={styles.expRow}>
-                        <Text style={styles.expIcon}>🛫</Text>
+                        <Ionicons name="arrow-up-circle-outline" size={28} color={COLORS.textSecondary} style={{ marginRight: 12 }} />
                         <View style={styles.expMain}>
                             <Text style={[styles.expTotal, { color: alertTheme.color }]}>
                                 {experienceReport.totalTo}
@@ -186,7 +187,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
 
                     {/* Row 2: Landing totals (core) + day/night sub-labels */}
                     <View style={styles.expRow}>
-                        <Text style={styles.expIcon}>🛬</Text>
+                        <Ionicons name="arrow-down-circle-outline" size={28} color={COLORS.textSecondary} style={{ marginRight: 12 }} />
                         <View style={styles.expMain}>
                             <Text style={[styles.expTotal, { color: alertTheme.color }]}>
                                 {experienceReport.totalLdg}
@@ -202,13 +203,13 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                 {/* Totals Cards */}
                 <View style={styles.cardRow}>
                     <View style={styles.totalCard}>
-                        <Text style={styles.totalIcon}>✈</Text>
+                        <Ionicons name="airplane" size={28} color={COLORS.primary} style={{ marginBottom: 8 }} />
                         <Text style={styles.totalLabel}>Total Block</Text>
                         <Text style={styles.totalValue}>{minutesToHHMM(totalFlightMin)}</Text>
                         <Text style={styles.totalUnit}>All Time</Text>
                     </View>
                     <View style={[styles.totalCard, { borderColor: COLORS.sim }]}>
-                        <Text style={styles.totalIcon}>🖥</Text>
+                        <Ionicons name="desktop-outline" size={28} color={COLORS.sim} style={{ marginBottom: 8 }} />
                         <Text style={styles.totalLabel}>Simulator</Text>
                         <Text style={styles.totalValue}>{minutesToHHMM(totalSimMin)}</Text>
                         <Text style={styles.totalUnit}>Total Time</Text>
@@ -297,7 +298,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 10,
     },
-    expIcon: { fontSize: 22, marginRight: 12 },
     expMain: { alignItems: 'center', marginRight: 16, minWidth: 56 },
     expTotal: { fontSize: 36, fontWeight: '800', lineHeight: 40 },
     expUnit: { color: COLORS.textSecondary, fontSize: 10, marginTop: 2 },
@@ -319,7 +319,6 @@ const styles = StyleSheet.create({
         padding: 16,
         alignItems: 'center',
     },
-    totalIcon: { fontSize: 24, marginBottom: 8 },
     totalLabel: { color: COLORS.textSecondary, fontSize: 12, fontWeight: '600' },
     totalValue: { color: COLORS.text, fontSize: 28, fontWeight: '800', marginTop: 4 },
     totalUnit: { color: COLORS.textSecondary, fontSize: 11 },

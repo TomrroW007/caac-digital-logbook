@@ -14,6 +14,7 @@ import {
     Alert,
     StyleSheet,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import withObservables from '@nozbe/with-observables';
@@ -90,7 +91,7 @@ const TimelineScreenBase: React.FC<TimelineProps> = ({ logbooks }) => {
                     { backgroundColor: item.isFlight ? COLORS.flight : COLORS.sim }
                 ]}>
                     <Text style={styles.dutyBadgeText}>
-                        {item.isFlight ? '✈' : '🖥'}
+                        {item.isFlight ? <Ionicons name="airplane" size={18} color="#FFFFFF" /> : <Ionicons name="desktop-outline" size={18} color="#FFFFFF" />}
                     </Text>
                 </View>
             </View>
@@ -119,13 +120,13 @@ const TimelineScreenBase: React.FC<TimelineProps> = ({ logbooks }) => {
                 ListHeaderComponent={
                     logbooks.length > 0 ? (
                         <Text style={styles.hint}>
-                            💡 Long-press a record to delete
+                            <Ionicons name="bulb-outline" size={12} />{' Long-press a record to delete'}
                         </Text>
                     ) : null
                 }
                 ListEmptyComponent={
                     <View style={styles.empty}>
-                        <Text style={styles.emptyIcon}>📋</Text>
+                        <Ionicons name="clipboard-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 16 }} />
                         <Text style={styles.emptyTitle}>No Records Yet</Text>
                         <Text style={styles.emptySubtitle}>
                             Tap "+ Add Record" on the Dashboard to log your first flight.
@@ -191,7 +192,6 @@ const styles = StyleSheet.create({
     cardTimeLabel: { color: COLORS.textSecondary, fontSize: 10, marginTop: 2 },
 
     empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
-    emptyIcon: { fontSize: 48, marginBottom: 16 },
     emptyTitle: { color: COLORS.text, fontSize: 18, fontWeight: '700', marginBottom: 8 },
     emptySubtitle: { color: COLORS.textSecondary, fontSize: 14, textAlign: 'center' },
 

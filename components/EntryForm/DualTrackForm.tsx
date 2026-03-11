@@ -19,6 +19,7 @@ import {
     Alert,
     ActivityIndicator,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import MaskedTimeInput from '../shared/MaskedTimeInput';
 import { OptionPicker } from '../shared/OptionPicker';
@@ -627,7 +628,7 @@ export const DualTrackForm: React.FC<Props> = ({
             {/* ── Header: title + SIMULATOR secondary entry ─────────────────── */}
             <View style={styles.formHeader}>
                 <Text style={styles.formHeaderTitle}>
-                    {dutyType === 'FLIGHT' ? '✈ Experience' : '🖥 Simulator'}
+                    {dutyType === 'FLIGHT' ? <><Ionicons name="airplane" size={18} />{' Experience'}</> : <><Ionicons name="desktop-outline" size={18} />{' Simulator'}</>}
                 </Text>
                 <TouchableOpacity
                     style={[
@@ -641,7 +642,7 @@ export const DualTrackForm: React.FC<Props> = ({
                         styles.simToggleText,
                         dutyType === 'SIMULATOR' && styles.simToggleTextActive,
                     ]}>
-                        {dutyType === 'SIMULATOR' ? '✈ Flight' : '🖥 Simulator'}
+                        {dutyType === 'SIMULATOR' ? <><Ionicons name="airplane" size={14} />{' Flight'}</> : <><Ionicons name="desktop-outline" size={14} />{' Simulator'}</>}
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -699,7 +700,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                         />
                                     )}
                                     {fetchSuccess && (
-                                        <Text style={{ marginLeft: 6, fontSize: 16 }}>✨</Text>
+                                        <Ionicons name="checkmark-circle" size={16} color={COLORS.success} style={{ marginLeft: 6 }} />
                                     )}
                                 </View>
                             </View>
@@ -795,7 +796,7 @@ export const DualTrackForm: React.FC<Props> = ({
                         {(depHasDst || arrHasDst) && (
                             <View style={styles.dstBanner}>
                                 <Text style={styles.dstBannerTitle}>
-                                    💡 DST Alert: Daylight Saving Time may apply
+                                    <Ionicons name="bulb-outline" size={14} />{' DST Alert: Daylight Saving Time may apply'}
                                 </Text>
                                 <Text style={styles.dstBannerText}>
                                     Auto-detected UTC offset is for reference. Verify and adjust as needed ⏷.
@@ -908,7 +909,7 @@ export const DualTrackForm: React.FC<Props> = ({
                             </View>
                             <View style={styles.timeDataCellInput}>
                                 <Text style={styles.inputLabel}>
-                                    {showNightHint ? '🌙 Night (min)' : 'Night (min)'}
+                                    {showNightHint ? <><Ionicons name="moon" size={12} color={COLORS.success} />{' Night (min)'}</> : 'Night (min)'}
                                 </Text>
                                 <TextInput
                                     style={[styles.textInput, showNightHint && styles.nightHintInput]}
@@ -941,7 +942,7 @@ export const DualTrackForm: React.FC<Props> = ({
                             flight.pilotRole === 'PF' ? (
                                 <View style={styles.pfLandingBanner}>
                                     <Text style={styles.pfLandingBannerText}>
-                                        ✓ Auto-counted 1
+                                        <Ionicons name="checkmark-circle" size={12} />{' Auto-counted 1'}
                                         {(isNightHintTime(flight.ldgRaw) || isNightHintTime(flight.onRaw)) ? ' Night' : ' Day'}
                                         {' '}T/O & LDG
                                     </Text>
@@ -1004,7 +1005,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                     onPress={() => setIsManualLandings(false)}
                                     testID="btn-cancel-manual-landings"
                                 >
-                                    <Text style={styles.cancelManualBtnText}>↩ Reset to Auto</Text>
+                                    <Text style={styles.cancelManualBtnText}><Ionicons name="arrow-undo-outline" size={14} />{' Reset to Auto'}</Text>
                                 </TouchableOpacity>
                             </View>
                         )}

@@ -18,6 +18,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { DatabaseProvider } from '@nozbe/watermelondb/DatabaseProvider';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { database } from './database';
 import { DashboardScreen } from './screens/DashboardScreen';
@@ -55,12 +56,13 @@ const SCREEN_OPTIONS = {
 
 export default function App() {
     return (
-        <AppErrorBoundary>
-            <DatabaseProvider database={database}>
-                <View style={styles.root}>
-                    <NavigationContainer>
-                        <StatusBar style="light" backgroundColor="#0A0F1E" />
-                    <Stack.Navigator
+        <SafeAreaProvider>
+            <AppErrorBoundary>
+                <DatabaseProvider database={database}>
+                    <View style={styles.root}>
+                        <NavigationContainer>
+                            <StatusBar style="light" backgroundColor="#0A0F1E" />
+                        <Stack.Navigator
                         initialRouteName="Dashboard"
                         screenOptions={SCREEN_OPTIONS}
                     >
@@ -72,28 +74,29 @@ export default function App() {
                         <Stack.Screen
                             name="Timeline"
                             component={TimelineScreen}
-                            options={{ title: '历史记录' }}
+                            options={{ title: 'Timeline' }}
                         />
                         <Stack.Screen
                             name="EntryForm"
                             component={EntryFormScreen}
                             options={({ route }) => ({
-                                title: route.params?.recordId ? '编辑记录' : '新建记录',
+                                title: route.params?.recordId ? 'Edit Record' : 'New Record',
                                 presentation: 'modal',
                             })}
                         />
                         <Stack.Screen
                             name="Settings"
                             component={SettingsScreen}
-                            options={{ title: '设置与导出' }}
+                            options={{ title: 'Settings & Export' }}
                         />
                     </Stack.Navigator>
                     </NavigationContainer>
                     {/* PWA install guide — web-only, absolute overlay at bottom */}
                     {Platform.OS === 'web' && <PwaInstallPrompt />}
                 </View>
-            </DatabaseProvider>
-        </AppErrorBoundary>
+                </DatabaseProvider>
+            </AppErrorBoundary>
+        </SafeAreaProvider>
     );
 }
 
