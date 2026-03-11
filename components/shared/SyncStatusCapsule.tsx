@@ -33,28 +33,28 @@ const SyncStatusCapsule: React.FC<Props> = ({ status }) => {
 
     if (!isSupabaseConfigured()) {
         dot = '⬜';
-        label = 'Local';
-        color = COLORS.muted; 
+        label = '本地模式';
+        color = COLORS.muted;
     } else {
         switch (status.state) {
             case 'synced':
                 dot = '🟩';
-                label = 'Synced';
+                label = '已同步';
                 color = COLORS.success;
                 break;
             case 'syncing':
                 dot = '🟨';
-                label = 'Syncing…';
+                label = '同步中…';
                 color = COLORS.warning;
                 break;
             case 'error':
                 dot = '🟥';
-                label = 'Sync Error';
+                label = '同步失败';
                 color = COLORS.error;
                 break;
             default: // 'local' — configured but not signed in
                 dot = '⬜';
-                label = 'Not Signed In';
+                label = '未登录';
                 color = COLORS.muted;
         }
     }
