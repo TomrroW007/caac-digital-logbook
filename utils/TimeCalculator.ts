@@ -11,8 +11,9 @@
  * Key areas covered:
  *  1. Raw pilot input parsing  ("0830" → 510 minutes since midnight)
  *  2. Integer minutes ↔ HH:MM display format
+ *  3. Block-time calculation with automatic cross-midnight compensation
  *  4. Local-time → UTC ISO conversion (offline timezone library bridge)
- *  5. OFF/ON time inference from TO/LDG (the "±10 mins rule")
+ *  5. OFF/ON time inference from TO/LDG (the "10-5 rule")
  */
 
 // ─── 1. Raw Input Parsing ─────────────────────────────────────────────────────
@@ -246,41 +247,7 @@ export function localTimeToUtcISO(
     return new Date(utcEpochMs).toISOString();
 }
 
-/**
- * Converts a UTC ISO-8601 string back to a local HHMM string representation.
- * The inverse of localTimeToUtcISO. Used to auto-fill UI time fields.
- *
- * @param utcISO          - UTC ISO-8601 string (e.g. "2024-03-01T00:30:00.000Z")
- * @param tzOffsetMinutes - Airport's UTC offset in signed integer minutes.
- * @returns 4-digit zero-padded local time string "HHMM"
- *
- * @example
- * // 00:30 UTC at UTC+8 (Beijing) → 08:30 local
- * utcISOToLocalHHMM("2024-03-01T00:30:00.000Z", 480)
- * // → "0830"
- */
-export function utcISOToLocalHHMM(
-    utcISO: string,
-    tzOffsetMinutes: number
-): string {
-    const utcEpochMs = Date.parse(utcISO);
-    if (isNaN(utcEpochMs)) {
-        throw new Error(`utcISOToLocalHHMM: invalid utcISO "${utcISO}".`);
-    }
-
-    // Add offset to get local epoch "as if" it were UTC
-    const localEpochMs = utcEpochMs + tzOffsetMinutes * 60 * 1000;
-    const localDateObj = new Date(localEpochMs);
-
-    // Because the "local" time is constructed as an absolute UTC timestamp, 
-    // we use getUTCHours/Minutes to read the shifted time back out.
-    const hh = localDateObj.getUTCHours();
-    const mm = localDateObj.getUTCMinutes();
-
-    return `${String(hh).padStart(2, '0')}${String(mm).padStart(2, '0')}`;
-}
-
-// ─── 5. OFF/ON Inference (±10 Mins Rule) ─────────────────────────────────────────
+// ─── 5. OFF/ON Inference (10-5 Rule) ─────────────────────────────────────────
 
 /**
  * Infers the chock-off and chock-on times from takeoff and landing times when
@@ -301,7 +268,7 @@ export function utcISOToLocalHHMM(
  * inferOffOn('2024-03-01T08:10:00Z', '2024-03-01T10:30:00Z')
  * // → {
  * //     offUtcISO: '2024-03-01T08:00:00.000Z',   // TO - 10m
- * //     onUtcISO:  '2024-03-01T10:40:00.000Z',   // LDG + 10m
+ * //     onUtcISO:  '2024-03-01T10:35:00.000Z',   // LDG + 5m
  * //   }
  */
 export function inferOffOn(
@@ -323,9 +290,10 @@ export function inferOffOn(
     }
 
     const TEN_MINUTES_MS = 10 * 60 * 1000;
+    const FIVE_MINUTES_MS = 5 * 60 * 1000;
 
     const offMs = toMs - TEN_MINUTES_MS;
-    const onMs = ldgMs + TEN_MINUTES_MS;
+    const onMs = ldgMs + FIVE_MINUTES_MS;
 
     return {
         offUtcISO: new Date(offMs).toISOString(),
