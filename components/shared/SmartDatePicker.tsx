@@ -69,7 +69,7 @@ export const SmartDatePicker: React.FC<Props> = ({ value, onChange, hasError }) 
                 activeOpacity={0.75}
                 testID="date-chip-today"
             >
-                <Text style={[styles.chipText, isToday && styles.activeText]}>今天</Text>
+                <Text style={[styles.chipText, isToday && styles.activeText]}>Today</Text>
             </TouchableOpacity>
 
             {/* 快捷筹码：昨天 */}
@@ -79,7 +79,7 @@ export const SmartDatePicker: React.FC<Props> = ({ value, onChange, hasError }) 
                 activeOpacity={0.75}
                 testID="date-chip-yesterday"
             >
-                <Text style={[styles.chipText, isYesterday && styles.activeText]}>昨天</Text>
+                <Text style={[styles.chipText, isYesterday && styles.activeText]}>Yesterday</Text>
             </TouchableOpacity>
 
             {/* 更多日期：Web / Native 双轨渲染 */}
@@ -106,7 +106,7 @@ export const SmartDatePicker: React.FC<Props> = ({ value, onChange, hasError }) 
                     testID="date-chip-other"
                 >
                     <Text style={[styles.chipText, isOther && styles.activeText]}>
-                        📅 {isOther ? value : '其他日期'}
+                        📅 {isOther ? value : 'Other'}
                     </Text>
                 </TouchableOpacity>
             )}

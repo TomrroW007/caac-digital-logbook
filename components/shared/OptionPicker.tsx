@@ -33,6 +33,8 @@ interface Props {
     options: OptionPickerOption[];
     /** Field label displayed above the picker row. */
     label: string;
+    /** If true, indicates a validation error */
+    hasError?: boolean;
     testID?: string;
 }
 

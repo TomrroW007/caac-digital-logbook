@@ -40,6 +40,7 @@ if (Platform.OS !== 'web') {
     Sharing = require('expo-sharing');
     FileSystem = require('expo-file-system');
 }
+import { Ionicons } from '@expo/vector-icons';
 import { Q } from '@nozbe/watermelondb';
 import withObservables from '@nozbe/with-observables';
 import * as XLSX from 'xlsx';
@@ -705,6 +706,8 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 setShowAuthModal(false);
                 setEmail('');
                 setPassword('');
+                // Automatically trigger sync on successful login
+                handleSync();
             }
         } finally {
             setAuthLoading(false);
@@ -779,14 +782,14 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             const status = await syncWithCloud();
             if (status.state === 'synced') {
                 const atStr = new Date(status.at).toLocaleString('zh-CN');
-                setSyncMsg(`✅ 同步成功 · ${atStr}`);
+                setSyncMsg(`Success · ${atStr}`);
                 crossAlert('云同步成功', `数据已安全备份至云端。\n同步时间：${atStr}`);
             } else if (status.state === 'error') {
-                setSyncMsg(`❌ 同步失败`);
+                setSyncMsg(`Error: Sync failed`);
                 crossAlert('云同步失败', status.message);
             }
         } catch (err) {
-            setSyncMsg('❌ 同步异常');
+            setSyncMsg('Error: Sync exception');
             crossAlert('云同步异常', err instanceof Error ? err.message : '未知错误');
         } finally {
             setSyncing(false);
@@ -799,7 +802,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
 
             {/* ── 历史数据导入 (Phase 7.1) ── */}
-            <Text style={styles.sectionHeader}>历史数据导入</Text>
+            <Text style={styles.sectionHeader}>Historical Data Import</Text>
 
             {/* 下载标准导入模板 */}
             <TouchableOpacity
@@ -808,17 +811,17 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 disabled={anyBusy}
                 testID="btn-download-template"
             >
-                <Text style={styles.exportIcon}>📥</Text>
+                <Ionicons name="download-outline" size={28} color={COLORS.accent} style={{ marginRight: 16 }} />
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>📥 下载标准导入模板</Text>
+                    <Text style={styles.exportTitle}>Download Import Template</Text>
                     <Text style={styles.exportDesc}>
-                        获取包含列名说明与填写示例的 .xlsx 空白模板，将历史数据粘贴后再上传
+                        Download blank .xlsx template with column headers and examples for bulk import.
                     </Text>
-                    <Text style={styles.exportCount}>格式：CCAR-61 标准 30 列模板</Text>
+                    <Text style={styles.exportCount}>Format: Standard 30-column template</Text>
                 </View>
                 {downloadingTpl
                     ? (<><ActivityIndicator size="small" color={COLORS.accent} />
-                        <Text style={styles.exportLoadingText}>生成中...</Text></>
+                        <Text style={styles.exportLoadingText}>Generating...</Text></>
                     )
                     : <Text style={styles.exportArrow}>›</Text>}
             </TouchableOpacity>
@@ -830,29 +833,29 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 disabled={anyBusy}
                 testID="btn-import-excel"
             >
-                <Text style={styles.exportIcon}>📤</Text>
+                <Ionicons name="cloud-upload-outline" size={28} color={COLORS.warning} style={{ marginRight: 16 }} />
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>📤 导入历史记录</Text>
+                    <Text style={styles.exportTitle}>Import Historical Records</Text>
                     <Text style={styles.exportDesc}>
-                        从标准模板 .xlsx 批量导入历史飞行记录，自动去重，打破迁移成本
+                        Batch import from template .xlsx. Auto-deduplication included.
                     </Text>
                     <Text style={styles.exportCount}>
-                        支持 .xlsx / .xls · 自动跳过重复条目
+                        Supports .xlsx / .xls · Auto-skips duplicates
                     </Text>
                 </View>
                 {importing
                     ? (<>
                         <ActivityIndicator size="small" color={COLORS.warning} />
-                        <Text style={styles.exportLoadingText}>导入中，请勿关闭...</Text>
+                        <Text style={styles.exportLoadingText}>Importing, please wait...</Text>
                     </>
                     )
                     : <Text style={styles.exportArrow}>›</Text>}
             </TouchableOpacity>
 
             {/* ── Phase 8: Export Filter Card (Segmented Controls) ── */}
-            <Text style={styles.sectionHeader}>导出设置 Export Settings</Text>
+            <Text style={styles.sectionHeader}>Export Settings</Text>
             <View style={styles.filterCard}>
-                <Text style={styles.filterLabel}>记录类型 Record Type</Text>
+                <Text style={styles.filterLabel}>Record Type</Text>
                 <View style={styles.segmentedRow}>
                     {(['ALL', 'FLIGHT', 'SIMULATOR'] as const).map(type => (
                         <TouchableOpacity
@@ -862,13 +865,13 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                             testID={`filter-type-${type.toLowerCase()}`}
                         >
                             <Text style={[styles.segBtnText, exportRecordType === type && styles.segBtnTextActive]}>
-                                {type === 'ALL' ? '全部' : type === 'FLIGHT' ? '真实飞行' : '模拟机'}
+                                {type === 'ALL' ? 'All' : type === 'FLIGHT' ? 'Flight' : 'Simulator'}
                             </Text>
                         </TouchableOpacity>
                     ))}
                 </View>
 
-                <Text style={[styles.filterLabel, { marginTop: 12 }]}>时间标准 Timezone</Text>
+                <Text style={[styles.filterLabel, { marginTop: 12 }]}>Timezone</Text>
                 <View style={styles.segmentedRow}>
                     {(['LT_BEIJING', 'UTC'] as const).map(tz => (
                         <TouchableOpacity
@@ -878,20 +881,26 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                             testID={`filter-tz-${tz.toLowerCase()}`}
                         >
                             <Text style={[styles.segBtnText, exportTimezone === tz && styles.segBtnTextActive]}>
-                                {tz === 'LT_BEIJING' ? '北京时间 LT' : 'UTC'}
+                                {tz === 'LT_BEIJING' ? 'Beijing LT' : 'UTC'}
                             </Text>
                         </TouchableOpacity>
                     ))}
                 </View>
 
                 <Text style={styles.filterCount}>
-                    已筛选 {prepareExportData(logbooks, exportRecordType).length} 条记录 ·
-                    {exportTimezone === 'LT_BEIJING' ? ' 展示北京时间 (UTC+8)' : ' 展示 UTC 时间'}
+                    Filtered: {prepareExportData(logbooks, exportRecordType).length} records ·
+                    {exportTimezone === 'LT_BEIJING' ? ' Showing Beijing Time (UTC+8)' : ' Showing UTC'}
                 </Text>
+                
+                <View style={{ marginTop: 12, padding: 8, backgroundColor: 'rgba(56, 189, 248, 0.1)', borderRadius: 6, borderWidth: 1, borderColor: 'rgba(56, 189, 248, 0.2)' }}>
+                    <Text style={{ fontSize: 11, color: '#38BDF8', lineHeight: 16 }}>
+                        <Ionicons name="information-circle" size={12} /> Per CAAC and CCAR-121 fatigue management audit requirements, all exported flight logs must use a strictly continuous timeline (UTC or Beijing LT) to ensure legal validity. Local dynamic timezones are disabled for compliance.
+                    </Text>
+                </View>
             </View>
 
             {/* ── 导出选项 ── */}
-            <Text style={styles.sectionHeader}>导出选项</Text>
+            <Text style={styles.sectionHeader}>Export Options</Text>
 
             {/* PDF Export */}
             <TouchableOpacity
@@ -900,21 +909,21 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 disabled={exportingPdf || exportingExcel}
                 testID="btn-export-pdf"
             >
-                <Text style={styles.exportIcon}>📄</Text>
+                <Ionicons name="document-text-outline" size={28} color={COLORS.primary} style={{ marginRight: 16 }} />
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>📄 导出标准 PDF 报表</Text>
+                    <Text style={styles.exportTitle}>Export Standard PDF Report</Text>
                     <Text style={styles.exportDesc}>
-                        符合 CCAR-61 部标准，含教员签字栏，可直接打印提交局方审查
+                        Compliant standard format with instructor signature fields. Print-ready for audit.
                     </Text>
                     <Text style={styles.exportCount}>
-                        {prepareExportData(logbooks, exportRecordType).length} 条记录 · A4 横向
+                        {prepareExportData(logbooks, exportRecordType).length} records · A4 Landscape
                     </Text>
                 </View>
                 {exportingPdf
                     ? (
                         <>
                             <ActivityIndicator size="small" color={COLORS.primary} />
-                            <Text style={styles.exportLoadingText}>正在生成局方标准报表...</Text>
+                            <Text style={styles.exportLoadingText}>Generating report...</Text>
                         </>
                     )
                     : <Text style={styles.exportArrow}>›</Text>}
@@ -927,28 +936,28 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 disabled={exportingPdf || exportingExcel}
                 testID="btn-export-excel"
             >
-                <Text style={styles.exportIcon}>📊</Text>
+                <Ionicons name="bar-chart-outline" size={28} color={COLORS.success} style={{ marginRight: 16 }} />
                 <View style={styles.exportInfo}>
-                    <Text style={styles.exportTitle}>📊 导出原始 Excel 数据</Text>
+                    <Text style={styles.exportTitle}>Export Raw Excel Data</Text>
                     <Text style={styles.exportDesc}>
-                        供个人数据备份与电脑端二次分析，格式兼容 WPS / Microsoft Excel
+                        For personal backup and desktop analysis. Compatible with WPS / Microsoft Excel.
                     </Text>
                     <Text style={styles.exportCount}>
-                        {prepareExportData(logbooks, exportRecordType).length} 条记录 · .xlsx 格式
+                        {prepareExportData(logbooks, exportRecordType).length} records · .xlsx
                     </Text>
                 </View>
                 {exportingExcel
                     ? (
                         <>
                             <ActivityIndicator size="small" color={COLORS.success} />
-                            <Text style={styles.exportLoadingText}>正在生成数据文件...</Text>
+                            <Text style={styles.exportLoadingText}>Generating data file...</Text>
                         </>
                     )
                     : <Text style={styles.exportArrow}>›</Text>}
             </TouchableOpacity>
 
             {/* ── 云端同步 (Phase 7.2) ── */}
-            <Text style={styles.sectionHeader}>云端同步</Text>
+            <Text style={styles.sectionHeader}>Cloud Sync</Text>
 
             {/* 账号状态 / 登录入口 */}
             {isSupabaseConfigured() && (
@@ -958,7 +967,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                             <Text style={styles.authStatusBadgeText}>✓</Text>
                         </View>
                         <View style={styles.authStatusInfo}>
-                            <Text style={styles.authStatusTitle}>已登录 · 云同步已开启</Text>
+                            <Text style={styles.authStatusTitle}>Signed In · Cloud Sync Active</Text>
                             <Text style={styles.authStatusEmail}>{session.user.email}</Text>
                         </View>
                         <TouchableOpacity
@@ -966,7 +975,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                             onPress={handleSignOut}
                             testID="btn-sign-out"
                         >
-                            <Text style={styles.signOutBtnText}>退出</Text>
+                            <Text style={styles.signOutBtnText}>Sign Out</Text>
                         </TouchableOpacity>
                     </View>
                 ) : (
@@ -975,11 +984,11 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                         onPress={() => { setAuthError(null); setShowAuthModal(true); }}
                         testID="btn-open-auth-modal"
                     >
-                        <Text style={styles.exportIcon}>🔐</Text>
+                        <Ionicons name="lock-closed-outline" size={28} color={COLORS.warning} style={{ marginRight: 16 }} />
                         <View style={styles.exportInfo}>
-                            <Text style={styles.exportTitle}>开启云同步 — 登录 / 注册</Text>
+                            <Text style={styles.exportTitle}>Enable Cloud Sync — Sign In / Sign Up</Text>
                             <Text style={styles.exportDesc}>
-                                绑定账号后，数据将通过 Supabase 安全加密同步，RLS 保障仅限本人访问
+                                Bind your account for encrypted sync. Row-Level Security ensures your-eyes-only access.
                             </Text>
                         </View>
                         <Text style={styles.exportArrow}>›</Text>
@@ -993,24 +1002,24 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 disabled={anyBusy || !session}
                 testID="btn-cloud-sync"
             >
-                <Text style={styles.exportIcon}>☁️</Text>
+                <Ionicons name="cloud-outline" size={28} color={isSupabaseConfigured() ? COLORS.primary : COLORS.textSecondary} style={{ marginRight: 16 }} />
                 <View style={styles.exportInfo}>
                     <Text style={styles.exportTitle}>
-                        ☁️ {isSupabaseConfigured() ? '立即同步到云端' : '云同步（未配置）'}
+                        {isSupabaseConfigured() ? 'Sync to Cloud Now' : 'Cloud Sync (Not Configured)'}
                     </Text>
                     <Text style={styles.exportDesc}>
                         {isSupabaseConfigured()
                             ? (session
-                                ? '将本地数据双向同步至 Supabase 云端，彻底解决 iOS Safari 清缓存丢数据问题'
-                                : '请先登录账号再执行同步')
-                            : '填入 supabaseClient.ts 中的 Project URL 与 Anon Key 后即可启用'}
+                                ? 'Bidirectional sync to cloud. Prevents data loss from browser cache clearing.'
+                                : 'Please sign in before syncing')
+                            : 'Enter Project URL and Anon Key in supabaseClient.ts to enable.'}
                     </Text>
                     {syncMsg && (
                         <Text style={[
                             styles.exportCount,
-                            { color: syncMsg.startsWith('✅') ? COLORS.success : COLORS.error },
+                            { color: syncMsg.startsWith('Success') ? COLORS.success : COLORS.error, marginTop: 4 },
                         ]}>
-                            {syncMsg}
+                            {syncMsg.startsWith('Success') ? <Ionicons name="checkmark-circle" size={12} /> : <Ionicons name="close-circle" size={12} />} {syncMsg}
                         </Text>
                     )}
                 </View>
@@ -1035,12 +1044,12 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                     <View style={styles.modalCard}>
                         {/* Header */}
                         <Text style={styles.modalTitle}>
-                            {authMode === 'signin' ? '🔐 登录账号' : '📝 创建新账号'}
+                            {authMode === 'signin' ? <><Ionicons name="lock-closed-outline" size={20} />{' Sign In'}</> : <><Ionicons name="person-add-outline" size={20} />{' Create Account'}</>}
                         </Text>
                         <Text style={styles.authHint}>
                             {authMode === 'signin'
-                                ? '登录后可将本地数据安全备份至云端'
-                                : '注册 Supabase 免费账号，每月可安全同步数据'
+                                ? 'Sign in to securely back up your data to the cloud.'
+                                : 'Register a free account for secure data sync.'
                             }
                         </Text>
 
@@ -1048,7 +1057,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
                         <TextInput
                             style={styles.authInput}
-                            placeholder="邮箱地址"
+                            placeholder="Email"
                             placeholderTextColor={COLORS.textSecondary}
                             keyboardType="email-address"
                             autoCapitalize="none"
@@ -1059,7 +1068,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                         />
                         <TextInput
                             style={styles.authInput}
-                            placeholder="密码（至少 6 位）"
+                            placeholder="Password (min 6 chars)"
                             placeholderTextColor={COLORS.textSecondary}
                             secureTextEntry
                             value={password}
@@ -1069,7 +1078,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
                         {authError && (
                             <View style={styles.authErrorBox}>
-                                <Text style={styles.authErrorText}>⚠️ {authError}</Text>
+                                <Text style={styles.authErrorText}><Ionicons name="warning" size={14} /> {authError}</Text>
                             </View>
                         )}
 
@@ -1082,7 +1091,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                             {authLoading
                                 ? <ActivityIndicator size="small" color="#fff" />
                                 : <Text style={styles.authPrimaryBtnText}>
-                                    {authMode === 'signin' ? '登 录' : '注 册'}
+                                    {authMode === 'signin' ? 'Sign In' : 'Sign Up'}
                                 </Text>
                             }
                         </TouchableOpacity>
@@ -1092,7 +1101,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                             testID="btn-toggle-auth-mode"
                         >
                             <Text style={styles.authToggleText}>
-                                {authMode === 'signin' ? '没有账号？点此免费注册' : '已有账号？返回登录'}
+                                {authMode === 'signin' ? "Don't have an account? Sign up free" : 'Already have an account? Sign in'}
                             </Text>
                         </TouchableOpacity>
 
@@ -1101,39 +1110,39 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                             onPress={() => setShowAuthModal(false)}
                             testID="btn-auth-cancel"
                         >
-                            <Text style={styles.modalCancelText}>取消</Text>
+                            <Text style={styles.modalCancelText}>Cancel</Text>
                         </TouchableOpacity>
                     </View>
                 </KeyboardAvoidingView>
             </Modal>
 
             {/* ── 关于 ── */}
-            <Text style={styles.sectionHeader}>关于</Text>
+            <Text style={styles.sectionHeader}>About</Text>
 
             <View style={styles.infoCard}>
-                <Text style={styles.infoLabel}>版本</Text>
+                <Text style={styles.infoLabel}>Version</Text>
                 <Text style={styles.infoValue}>1.4.0</Text>
             </View>
             <View style={styles.infoCard}>
-                <Text style={styles.infoLabel}>合规标准</Text>
-                <Text style={styles.infoValue}>CCAR-61部</Text>
+                <Text style={styles.infoLabel}>Compliance</Text>
+                <Text style={styles.infoValue}>CCAR-61</Text>
             </View>
             <View style={styles.infoCard}>
-                <Text style={styles.infoLabel}>数据存储</Text>
+                <Text style={styles.infoLabel}>Storage</Text>
                 <Text style={styles.infoValue}>
-                    {isSupabaseConfigured() ? '本地 + 云端同步' : '本地（离线优先）'}
+                    {isSupabaseConfigured() ? 'Local + Cloud Sync' : 'Local (Offline-First)'}
                 </Text>
             </View>
             <View style={styles.infoCard}>
-                <Text style={styles.infoLabel}>总记录数</Text>
-                <Text style={styles.infoValue}>{logbooks.length} 条</Text>
+                <Text style={styles.infoLabel}>Total Records</Text>
+                <Text style={styles.infoValue}>{logbooks.length}</Text>
             </View>
 
             {/* Offline / Cloud privacy disclaimer */}
             <Text style={styles.offlineDisclaimer}>
                 {isSupabaseConfigured()
-                    ? '数据在本地设备和你的 Supabase 项目之间同步，行级安全（RLS）保障仅限本账号访问。统计基准：以北京时间（UTC+8）自然日为起算点，回溯 90 天，仅统计 FLIGHT 记录。'
-                    : '所有飞行经历数据均存储于本设备，未同步至任何外部服务器。统计基准：以北京时间（UTC+8）自然日为起算点，回溯 90 天，仅统计 FLIGHT（真实飞行）记录，不含 SIMULATOR（模拟机）训练。'}
+                    ? 'Data is synced between your device and your Supabase project. Row-Level Security (RLS) ensures only your account can access your data. Stats are based on Beijing Time (UTC+8), rolling 90-day window, FLIGHT records only.'
+                    : 'All flight data is stored locally on this device and is not synced to any external server. Stats are based on Beijing Time (UTC+8), rolling 90-day window, FLIGHT records only. Simulator records are excluded from currency calculations.'}
             </Text>
         </ScrollView>
     );
