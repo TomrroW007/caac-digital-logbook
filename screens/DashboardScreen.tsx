@@ -146,7 +146,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
                         <Text style={styles.title}>✈ Pilot Logbook</Text>
-                        <Text style={styles.subtitle}>飞行经历记录本</Text>
+                        <Text style={styles.subtitle}>Digital Pilot Logbook</Text>
                     </View>
                     <SyncStatusCapsule status={syncStatus} />
                 </View>
@@ -154,7 +154,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                 {/* 90-Day Experience Card — PRD §4.2 dual-row layout */}
                 <View style={[styles.alertCard, { borderColor: alertTheme.color, backgroundColor: alertTheme.bg }]}>
                     <Text style={[styles.cardTitle, { color: alertTheme.color }]}>
-                        {experienceReport.alertLevel === 'ok' ? '✅' : experienceReport.alertLevel === 'yellow' ? '⚠️' : '🚫'} 近 90 天近期飞行经历
+                        {experienceReport.alertLevel === 'ok' ? '✅' : experienceReport.alertLevel === 'yellow' ? '⚠️' : '🚫'} 90-Day Currency
                     </Text>
                     <Text style={styles.cardSubtitle}>
                         {experienceReport.alertMessage}
@@ -167,10 +167,10 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                             <Text style={[styles.expTotal, { color: alertTheme.color }]}>
                                 {experienceReport.totalTo}
                             </Text>
-                            <Text style={styles.expUnit}>起飞次数 T/O</Text>
+                            <Text style={styles.expUnit}>Takeoffs (T/O)</Text>
                         </View>
                         <Text style={styles.expSub}>
-                            昼间：{experienceReport.dayTo} / 夜间：{experienceReport.nightTo}
+                            Day: {experienceReport.dayTo} / Night: {experienceReport.nightTo}
                         </Text>
                     </View>
 
@@ -183,10 +183,10 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                             <Text style={[styles.expTotal, { color: alertTheme.color }]}>
                                 {experienceReport.totalLdg}
                             </Text>
-                            <Text style={styles.expUnit}>着陆次数 LDG</Text>
+                            <Text style={styles.expUnit}>Landings (LDG)</Text>
                         </View>
                         <Text style={styles.expSub}>
-                            昼间：{experienceReport.dayLdg} / 夜间：{experienceReport.nightLdg}
+                            Day: {experienceReport.dayLdg} / Night: {experienceReport.nightLdg}
                         </Text>
                     </View>
                 </View>
@@ -195,15 +195,15 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                 <View style={styles.cardRow}>
                     <View style={styles.totalCard}>
                         <Text style={styles.totalIcon}>✈</Text>
-                        <Text style={styles.totalLabel}>飞行时间</Text>
+                        <Text style={styles.totalLabel}>Total Block</Text>
                         <Text style={styles.totalValue}>{minutesToHHMM(totalFlightMin)}</Text>
-                        <Text style={styles.totalUnit}>Block 累计</Text>
+                        <Text style={styles.totalUnit}>All Time</Text>
                     </View>
                     <View style={[styles.totalCard, { borderColor: COLORS.sim }]}>
                         <Text style={styles.totalIcon}>🖥</Text>
-                        <Text style={styles.totalLabel}>模拟机</Text>
+                        <Text style={styles.totalLabel}>Simulator</Text>
                         <Text style={styles.totalValue}>{minutesToHHMM(totalSimMin)}</Text>
-                        <Text style={styles.totalUnit}>Block 累计</Text>
+                        <Text style={styles.totalUnit}>Total Time</Text>
                     </View>
                 </View>
 
@@ -214,7 +214,7 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                         onPress={() => navigation.navigate('EntryForm')}
                         testID="btn-new-entry"
                     >
-                        <Text style={styles.primaryActionText}>+ 新增记录</Text>
+                        <Text style={styles.primaryActionText}>+ Add Record</Text>
                     </TouchableOpacity>
 
                     <View style={styles.secondaryActions}>
@@ -223,14 +223,14 @@ const DashboardScreenBase: React.FC<DashboardProps> = ({ logbooks }) => {
                             onPress={() => navigation.navigate('Timeline')}
                             testID="btn-timeline"
                         >
-                            <Text style={styles.secondaryActionText}>历史记录</Text>
+                            <Text style={styles.secondaryActionText}>Timeline</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.secondaryAction}
                             onPress={() => navigation.navigate('Settings')}
                             testID="btn-settings"
                         >
-                            <Text style={styles.secondaryActionText}>设置与导出</Text>
+                            <Text style={styles.secondaryActionText}>Settings & Export</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

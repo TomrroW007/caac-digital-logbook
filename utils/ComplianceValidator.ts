@@ -92,6 +92,12 @@ export type FlightRecordInput = {
     actlDate: string | null;
     schdDate: string | null;
     acftType: string | null;
+    depIcao?: string | null;
+    arrIcao?: string | null;
+    regNo?: string | null;
+    simCat?: string | null;
+    simNo?: string | null;
+    trainingType?: string | null;
     /** Optional pilot remarks. Stored as "{flightNo} | {remarks}" in export. */
     remarks: string | null;
 };
@@ -172,6 +178,54 @@ export function validateFlightRecord(data: FlightRecordInput): ValidationResult 
         });
     }
 
+    if (data.dutyType === 'FLIGHT') {
+        if (!data.depIcao || data.depIcao.trim() === '') {
+            errors.push({
+                field: 'dep_icao',
+                message: '起飞机场不能为空。',
+                code: 'REQUIRED_FIELD_MISSING',
+            });
+        }
+        if (!data.arrIcao || data.arrIcao.trim() === '') {
+            errors.push({
+                field: 'arr_icao',
+                message: '降落机场不能为空。',
+                code: 'REQUIRED_FIELD_MISSING',
+            });
+        }
+        if (!data.regNo || data.regNo.trim() === '') {
+            errors.push({
+                field: 'reg_no',
+                message: '航空器代号不能为空。',
+                code: 'REQUIRED_FIELD_MISSING',
+            });
+        }
+    }
+
+    if (data.dutyType === 'SIMULATOR') {
+        if (!data.simCat || data.simCat.trim() === '') {
+            errors.push({
+                field: 'sim_cat',
+                message: '模拟机等级不能为空。',
+                code: 'REQUIRED_FIELD_MISSING',
+            });
+        }
+        if (!data.simNo || data.simNo.trim() === '') {
+            errors.push({
+                field: 'sim_no',
+                message: '模拟机编号不能为空。',
+                code: 'REQUIRED_FIELD_MISSING',
+            });
+        }
+        if (!data.trainingType || data.trainingType.trim() === '') {
+            errors.push({
+                field: 'training_type',
+                message: '训练类型不能为空。',
+                code: 'REQUIRED_FIELD_MISSING',
+            });
+        }
+    }
+
     // ── Block time must be positive ────────────────────────────────────────────
 
     if (data.blockTimeMin <= 0) {
@@ -201,6 +255,14 @@ export function validateFlightRecord(data: FlightRecordInput): ValidationResult 
                 `超出飞行时间 ${data.blockTimeMin} 分钟（多 ${excess} 分钟）。` +
                 `依据 CCAR-61 合规要求，各项经历时间之和不得超过飞行时间 (Block Time)。`,
             code: 'ROLE_TIME_EXCEEDS_BLOCK',
+        });
+    }
+
+    if (data.dutyType === 'FLIGHT' && roleTimeSum <= 0 && data.blockTimeMin > 0) {
+        errors.push({
+            field: 'pic_min',
+            message: '真实飞行记录必须至少分配 1 分钟的经历时间 (PIC, SIC, etc) 给某一个角色。',
+            code: 'EXPERIENCE_TIME_ZERO',
         });
     }
 
