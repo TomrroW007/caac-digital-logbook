@@ -33,11 +33,13 @@ jobs:
           workingDirectory: 'worker'
           command: deploy --env staging
 
-      # 编译前端 Web，注入 Staging 的后端 URL
+      # 编译前端 Web，注入 Staging 的后端 URL 和 Supabase 配置
       - name: Build Web (Staging)
         run: npm run build:web
         env:
           EXPO_PUBLIC_WORKER_URL: https://caac-logbook-worker-staging.caac-logbook.workers.dev
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL_STAGING }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY_STAGING }}
 
       # 部署前端到 Cloudflare Pages (非 main 分支会被视为 Preview 环境)
       - name: Deploy Pages (Staging)
@@ -70,11 +72,13 @@ jobs:
           workingDirectory: 'worker'
           command: deploy
 
-      # 编译前端 Web，你的 package.json 中配置了 build:web 指令
+      # 编译前端 Web，注入 Production 的后端 URL 和 Supabase 配置
       - name: Build Web (Production)
         run: npm run build:web
         env:
           EXPO_PUBLIC_WORKER_URL: https://caac-logbook-worker.caac-logbook.workers.dev
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL_PROD }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY_PROD }}
 
       # 部署前端到 Cloudflare Pages 的生产环境
       - name: Deploy Pages (Production)

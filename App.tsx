@@ -13,8 +13,10 @@
  */
 
 import React from 'react';
-import { Platform, View, StyleSheet } from 'react-native';
+import { Platform, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useFonts } from 'expo-font';
+import { Ionicons } from '@expo/vector-icons';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { DatabaseProvider } from '@nozbe/watermelondb/DatabaseProvider';
@@ -55,6 +57,17 @@ const SCREEN_OPTIONS = {
 // ─── Root Component ───────────────────────────────────────────────────────────
 
 export default function App() {
+    const [fontsLoaded] = useFonts({
+        // Names MUST match what @expo/vector-icons components expect internally:
+        //   Ionicons.js      → createIconSet(glyphMap, 'ionicons', font)
+        //   MaterialIcons.js  → createIconSet(glyphMap, 'material', font)
+        // Local copies avoid the '@expo' path that Cloudflare Pages SPA routing breaks.
+        'ionicons': require('./assets/fonts/Ionicons.ttf'),
+        'material': require('./assets/fonts/MaterialIcons.ttf'),
+    });
+
+    if (!fontsLoaded) return null;
+
     return (
         <SafeAreaProvider>
             <AppErrorBoundary>
@@ -64,7 +77,15 @@ export default function App() {
                             <StatusBar style="light" backgroundColor="#0A0F1E" />
                         <Stack.Navigator
                         initialRouteName="Dashboard"
-                        screenOptions={SCREEN_OPTIONS}
+                        screenOptions={({ navigation }) => ({
+                            ...SCREEN_OPTIONS,
+                            headerLeft: ({ canGoBack, tintColor }: { canGoBack?: boolean; tintColor?: string }) =>
+                                canGoBack ? (
+                                    <TouchableOpacity onPress={() => navigation.goBack()} style={{ paddingRight: 8 }}>
+                                        <Ionicons name="chevron-back" size={24} color={tintColor || '#F9FAFB'} />
+                                    </TouchableOpacity>
+                                ) : undefined,
+                        })}
                     >
                         <Stack.Screen
                             name="Dashboard"
