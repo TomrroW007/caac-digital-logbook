@@ -11,12 +11,14 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { isSupabaseConfigured } from '../../utils/supabaseClient';
 import type { SyncStatus } from '../../utils/SyncService';
 
 interface Props {
     status: SyncStatus;
+    isSignedIn: boolean;
 }
 
 const COLORS = {
@@ -24,44 +26,51 @@ const COLORS = {
     warning: '#F59E0B',
     error: '#EF4444',
     muted: '#9CA3AF',
+    ready: '#3B82F6',
 };
 
-const SyncStatusCapsule: React.FC<Props> = ({ status }) => {
-    let dot: string;
+const SyncStatusCapsule: React.FC<Props> = ({ status, isSignedIn }) => {
+    let dot: React.ReactNode;
     let label: string;
     let color: string;
 
     if (!isSupabaseConfigured()) {
-        dot = '⬜';
-        label = '本地模式';
+        dot = <Ionicons name="cloud-offline-outline" size={14} color={COLORS.muted} />;
+        label = 'Local';
         color = COLORS.muted;
     } else {
         switch (status.state) {
             case 'synced':
-                dot = '🟩';
-                label = '已同步';
+                dot = <Ionicons name="cloud-done" size={14} color={COLORS.success} />;
+                label = 'Synced';
                 color = COLORS.success;
                 break;
             case 'syncing':
-                dot = '🟨';
-                label = '同步中…';
+                dot = <Ionicons name="sync" size={14} color={COLORS.warning} />;
+                label = 'Syncing…';
                 color = COLORS.warning;
                 break;
             case 'error':
-                dot = '🟥';
-                label = '同步失败';
+                dot = <Ionicons name="warning" size={14} color={COLORS.error} />;
+                label = 'Sync Error';
                 color = COLORS.error;
                 break;
-            default: // 'local' — configured but not signed in
-                dot = '⬜';
-                label = '未登录';
-                color = COLORS.muted;
+            default: // 'local' — configured but not signed in OR signed in but no sync yet
+                if (isSignedIn) {
+                    dot = <Ionicons name="cloud-outline" size={14} color={COLORS.ready} />;
+                    label = 'Cloud Ready';
+                    color = COLORS.ready;
+                } else {
+                    dot = <Ionicons name="cloud-offline-outline" size={14} color={COLORS.muted} />;
+                    label = 'Not Signed In';
+                    color = COLORS.muted;
+                }
         }
     }
 
     return (
         <View style={styles.capsule}>
-            <Text style={styles.dot}>{dot}</Text>
+            {dot}
             <Text style={[styles.label, { color }]}>{label}</Text>
         </View>
     );
@@ -74,7 +83,6 @@ const styles = StyleSheet.create({
         paddingLeft: 12,
         paddingTop: 2,
     },
-    dot: { fontSize: 14, lineHeight: 20 },
     label: { fontSize: 10, fontWeight: '600', marginTop: 2 },
 });
 

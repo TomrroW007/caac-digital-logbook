@@ -3,8 +3,8 @@ module.exports = function (api) {
     return {
         presets: ['babel-preset-expo'],
         plugins: [
-            // 1. Prioritise handling TypeScript's declare field
-            ['@babel/plugin-transform-typescript', { allowDeclareFields: true }],
+            // 1. Prioritise handling TypeScript's declare field while retaining JSX parsing
+            ['@babel/plugin-transform-typescript', { isTSX: true, allExtensions: true, allowDeclareFields: true }],
 
             // 2. Handling the decorators required for WatermelonDB
             ['@babel/plugin-proposal-decorators', { legacy: true }],

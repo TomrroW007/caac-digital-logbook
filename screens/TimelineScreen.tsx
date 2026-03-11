@@ -14,6 +14,7 @@ import {
     Alert,
     StyleSheet,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import withObservables from '@nozbe/with-observables';
@@ -55,12 +56,12 @@ const TimelineScreenBase: React.FC<TimelineProps> = ({ logbooks }) => {
     // ── Soft-delete: long-press → Alert → WatermelonDB write ──
     const handleDelete = (record: LogbookRecord) => {
         Alert.alert(
-            '删除记录',
-            '确定要删除该条记录吗？删除后该记录将不再纳入 Dashboard 统计与导出报表。',
+            'Delete Record',
+            'Are you sure you want to delete this record? It will be excluded from Dashboard stats and exports.',
             [
-                { text: '取消', style: 'cancel' },
+                { text: 'Cancel', style: 'cancel' },
                 {
-                    text: '确认删除',
+                    text: 'Delete',
                     style: 'destructive',
                     onPress: () => {
                         database.write(async () => {
@@ -90,7 +91,7 @@ const TimelineScreenBase: React.FC<TimelineProps> = ({ logbooks }) => {
                     { backgroundColor: item.isFlight ? COLORS.flight : COLORS.sim }
                 ]}>
                     <Text style={styles.dutyBadgeText}>
-                        {item.isFlight ? '✈' : '🖥'}
+                        {item.isFlight ? <Ionicons name="airplane" size={18} color="#FFFFFF" /> : <Ionicons name="desktop-outline" size={18} color="#FFFFFF" />}
                     </Text>
                 </View>
             </View>
@@ -119,16 +120,16 @@ const TimelineScreenBase: React.FC<TimelineProps> = ({ logbooks }) => {
                 ListHeaderComponent={
                     logbooks.length > 0 ? (
                         <Text style={styles.hint}>
-                            💡 长按单条记录可删除
+                            <Ionicons name="bulb-outline" size={12} />{' Long-press a record to delete'}
                         </Text>
                     ) : null
                 }
                 ListEmptyComponent={
                     <View style={styles.empty}>
-                        <Text style={styles.emptyIcon}>📋</Text>
-                        <Text style={styles.emptyTitle}>暂无飞行记录</Text>
+                        <Ionicons name="clipboard-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 16 }} />
+                        <Text style={styles.emptyTitle}>No Records Yet</Text>
                         <Text style={styles.emptySubtitle}>
-                            点击「+ 新增记录」按钮开始记录您的第一段飞行经历。
+                            Tap "+ Add Record" on the Dashboard to log your first flight.
                         </Text>
                     </View>
                 }
@@ -191,7 +192,6 @@ const styles = StyleSheet.create({
     cardTimeLabel: { color: COLORS.textSecondary, fontSize: 10, marginTop: 2 },
 
     empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
-    emptyIcon: { fontSize: 48, marginBottom: 16 },
     emptyTitle: { color: COLORS.text, fontSize: 18, fontWeight: '700', marginBottom: 8 },
     emptySubtitle: { color: COLORS.textSecondary, fontSize: 14, textAlign: 'center' },
 
