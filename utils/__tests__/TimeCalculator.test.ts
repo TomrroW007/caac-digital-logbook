@@ -20,7 +20,6 @@ import {
     localTimeToUtcISO,
     inferOffOn,
     isRoleTimeSumValid,
-    utcISOToLocalHHMM,
 } from '../TimeCalculator';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -274,16 +273,16 @@ describe('localTimeToUtcISO', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. inferOffOn (±10 Mins Rule)
+// 6. inferOffOn (10-5 Rule)
 // ─────────────────────────────────────────────────────────────────────────────
 describe('inferOffOn', () => {
-    it('applies ±10 mins rule: OFF = TO - 10m, ON = LDG + 10m', () => {
+    it('applies 10-5 rule: OFF = TO - 10m, ON = LDG + 5m', () => {
         const { offUtcISO, onUtcISO } = inferOffOn(
             '2024-03-01T08:10:00Z', // TO
             '2024-03-01T10:30:00Z'  // LDG
         );
         expect(offUtcISO).toBe('2024-03-01T08:00:00.000Z'); // TO - 10m
-        expect(onUtcISO).toBe('2024-03-01T10:40:00.000Z');  // LDG + 10m
+        expect(onUtcISO).toBe('2024-03-01T10:35:00.000Z');  // LDG + 5m
     });
 
     it('handles TO at exactly 00:05 UTC (OFF would be 23:55 previous day)', () => {
@@ -430,31 +429,5 @@ describe('localTimeToUtcISO — cross-midnight date rollback proof', () => {
         // West of UTC: subtracting a negative offset ADDS hours — date stays same.
         const result = localTimeToUtcISO('2026-03-02', '0005', -300);
         expect(result).toBe('2026-03-02T05:05:00.000Z');
-    });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 10. utcISOToLocalHHMM (Inverse of localTimeToUtcISO)
-// ─────────────────────────────────────────────────────────────────────────────
-describe('utcISOToLocalHHMM', () => {
-    it('converts 00:30 UTC at UTC+8 → 08:30 local', () => {
-        expect(utcISOToLocalHHMM('2024-03-01T00:30:00.000Z', 480)).toBe('0830');
-    });
-
-    it('converts 13:30 UTC at UTC-5 → 08:30 local', () => {
-        expect(utcISOToLocalHHMM('2024-03-01T13:30:00.000Z', -300)).toBe('0830');
-    });
-
-    it('round-trips correctly with localTimeToUtcISO', () => {
-        const localTimeStr = '2350';
-        const offset = 480;
-        const utcIso = localTimeToUtcISO('2026-05-15', localTimeStr, offset);
-        const backToLocal = utcISOToLocalHHMM(utcIso, offset);
-        expect(backToLocal).toBe(localTimeStr); // 2350 -> 2350
-    });
-
-    it('pads single digits with zero', () => {
-        // 16:05 UTC at UTC+8 = 00:05 local (the boundary test case)
-        expect(utcISOToLocalHHMM('2026-03-01T16:05:00.000Z', 480)).toBe('0005');
     });
 });

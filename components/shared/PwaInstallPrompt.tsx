@@ -68,22 +68,22 @@ export const PwaInstallPrompt: React.FC = () => {
             <View style={styles.card}>
                 <Text style={styles.icon}>✈</Text>
                 <View style={styles.body}>
-                    <Text style={styles.title}>Get the Best Offline Experience</Text>
+                    <Text style={styles.title}>获取最佳离线体验</Text>
                     <Text style={styles.desc}>
-                        Tap{' '}
-                        <Text style={styles.highlight}>[Share]</Text>
+                        在 Safari 底部点击{' '}
+                        <Text style={styles.highlight}>［分享］</Text>
                         {' '}→{' '}
-                        <Text style={styles.highlight}>Add to Home Screen</Text>
-                        {' '}to use like a native app, with no address bar and offline support.
+                        <Text style={styles.highlight}>添加到主屏幕</Text>
+                        ，即可像原生 App 一样使用，无地址栏，支持离线。
                     </Text>
                 </View>
                 <TouchableOpacity
                     style={styles.dismissBtn}
                     onPress={handleDismiss}
-                    accessibilityLabel="Dismiss install prompt"
+                    accessibilityLabel="关闭安装提示"
                     testID="pwa-install-dismiss"
                 >
-                    <Text style={styles.dismissText}>Got it</Text>
+                    <Text style={styles.dismissText}>知道了</Text>
                 </TouchableOpacity>
             </View>
         </View>

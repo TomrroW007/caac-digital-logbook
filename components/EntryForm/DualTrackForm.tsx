@@ -23,10 +23,11 @@ import {
 import MaskedTimeInput from '../shared/MaskedTimeInput';
 import { OptionPicker } from '../shared/OptionPicker';
 import { SmartDatePicker } from '../shared/SmartDatePicker';
-import { calcBlockMinutes, hhmmToMinutes, localTimeToUtcISO, utcISOToLocalHHMM, minutesToHHMM, isNightHintTime } from '../../utils/TimeCalculator';
 import { resolveFourTimePoints, calcFlightTimeMin } from '../../utils/FlightMath';
 import { validateFlightRecord, type FlightRecordInput } from '../../utils/ComplianceValidator';
 import { lookupAirportOffset, isDstObservingRegion } from '../../data/airportTimezones';
+import { localTimeToUtcISO, isNightHintTime } from '../../utils/TimeCalculator';
+import { minutesToHHMM } from '../../utils/TimeCalculator';
 import type { LogbookRecord } from '../../model/LogbookRecord';
 import type { CapacityRole } from '../../model/schema';
 import { fetchFlightInfo } from '../../utils/ApiService';
@@ -89,15 +90,15 @@ export type PresetCategory = {
 
 const ACFT_TYPE_CATEGORIES: PresetCategory[] = [
     {
-        label: 'Airbus',
+        label: '空客 Airbus',
         items: ['A319', 'A320', 'A321', 'A321NEO', 'A330-200', 'A330-300', 'A350-900', 'A380']
     },
     {
-        label: 'Boeing',
+        label: '波音 Boeing',
         items: ['B737-800', 'B737MAX8', 'B777-200', 'B777-300ER', 'B787-9']
     },
     {
-        label: 'Others',
+        label: '其他 Others',
         items: ['C919', 'ARJ21', 'E175', 'E190', 'E195', 'ATR72', 'CRJ900']
     }
 ];
@@ -110,7 +111,7 @@ const APPROACH_TYPE_OPTIONS = [
     { label: 'RNAV (GNSS)', value: 'RNAV (GNSS)' },
     { label: 'VOR', value: 'VOR' },
     { label: 'NDB', value: 'NDB' },
-    { label: 'Visual', value: 'Visual' },
+    { label: '目视 Visual', value: 'Visual' },
 ];
 
 const SIM_CAT_OPTIONS = [
@@ -345,21 +346,10 @@ export const DualTrackForm: React.FC<Props> = ({
                 offUtcISO, toUtcISO, ldgUtcISO, onUtcISO,
             });
             setBlockTimeMin(resolved.blockTimeMin);
-
-            // If inference took place (±10 mins triggered), auto-fill the UI fields
-            if (resolved.wasInferred) {
-                setFlight(prev => ({
-                    ...prev,
-                    // If we inferred OFF, map it back to the local HHMM of the departure airport
-                    offRaw: (!offUtcISO) ? utcISOToLocalHHMM(resolved.offUtcISO, depOffsetOverride) : prev.offRaw,
-                    // If we inferred ON, map it back to the local HHMM of the arrival airport
-                    onRaw: (!onUtcISO) ? utcISOToLocalHHMM(resolved.onUtcISO, arrOffsetOverride) : prev.onRaw,
-                }));
-            }
         } catch {
             // Not enough data yet to resolve — silent
         }
-    }, [flight, shared.actlDate, depOffsetOverride, arrOffsetOverride, setFlight]);
+    }, [flight, shared.actlDate, depOffsetOverride, arrOffsetOverride]);
 
     // ── SIM Time Auto-Fill ────────────────────────────────────────────────────
 
@@ -382,15 +372,7 @@ export const DualTrackForm: React.FC<Props> = ({
         }
     }, [sim, shared.actlDate]);
 
-    const roleTimeSum =
-        (parseInt(flight.picRaw) || 0) +
-        (parseInt(flight.picUsRaw) || 0) +
-        (parseInt(flight.spicRaw) || 0) +
-        (parseInt(flight.sicRaw) || 0) +
-        (parseInt(flight.dualRaw) || 0) +
-        (parseInt(flight.instructorRaw) || 0);
-
-    // ── Main Render ──────────────────────────────────────────────────────────────────
+    // ── Save ──────────────────────────────────────────────────────────────────
 
     const handleSave = () => {
         setSubmitted(true);
@@ -426,12 +408,6 @@ export const DualTrackForm: React.FC<Props> = ({
             actlDate: shared.actlDate,
             schdDate: shared.schdDate,
             acftType: shared.acftType || null,
-            depIcao: dutyType === 'FLIGHT' ? flight.depIcao : null,
-            arrIcao: dutyType === 'FLIGHT' ? flight.arrIcao : null,
-            regNo: dutyType === 'FLIGHT' ? shared.regNo : null,
-            simCat: dutyType === 'SIMULATOR' ? sim.simCat : null,
-            simNo: dutyType === 'SIMULATOR' ? sim.simNo : null,
-            trainingType: dutyType === 'SIMULATOR' ? sim.trainingType : null,
             remarks: shared.remarks || null,
         };
 
@@ -442,9 +418,9 @@ export const DualTrackForm: React.FC<Props> = ({
             result.errors.forEach(e => { errMap[e.field] = e.message; });
             setErrors(errMap);
             Alert.alert(
-                'Save Failed',
-                `${result.errors.length} field(s) require attention. Please review the highlighted fields and try again.`,
-                [{ text: 'OK', style: 'default' }]
+                '保存失败',
+                `存在 ${result.errors.length} 项不符合要求的内容，请检查标注字段后重新保存。`,
+                [{ text: '确认', style: 'default' }]
             );
             return;
         }
@@ -605,12 +581,12 @@ export const DualTrackForm: React.FC<Props> = ({
     // ── Remarks section (shared across both duty tracks) ─────────────────────
     const renderRemarksSection = () => (
         <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Remarks</Text>
+            <Text style={styles.sectionTitle}>备注 Remarks</Text>
             <TextInput
                 style={[styles.textInput, { height: 72, textAlignVertical: 'top' }]}
                 value={shared.remarks}
                 onChangeText={v => updateShared({ remarks: v })}
-                placeholder="Remarks (optional)"
+                placeholder="备注（可选）"
                 placeholderTextColor={COLORS.placeholder}
                 multiline
                 numberOfLines={3}
@@ -627,7 +603,7 @@ export const DualTrackForm: React.FC<Props> = ({
             {/* ── Header: title + SIMULATOR secondary entry ─────────────────── */}
             <View style={styles.formHeader}>
                 <Text style={styles.formHeaderTitle}>
-                    {dutyType === 'FLIGHT' ? '✈ Experience' : '🖥 Simulator'}
+                    {dutyType === 'FLIGHT' ? '✈ 经历时间 Experience' : '🖥 模拟机 Simulator'}
                 </Text>
                 <TouchableOpacity
                     style={[
@@ -641,19 +617,19 @@ export const DualTrackForm: React.FC<Props> = ({
                         styles.simToggleText,
                         dutyType === 'SIMULATOR' && styles.simToggleTextActive,
                     ]}>
-                        {dutyType === 'SIMULATOR' ? '✈ Flight' : '🖥 Simulator'}
+                        {dutyType === 'SIMULATOR' ? '✈ 切回飞行' : '🖥 模拟机'}
                     </Text>
                 </TouchableOpacity>
             </View>
 
             {/* ── Shared Fields ────────────────────────────────────────────── */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Basic Info</Text>
+                <Text style={styles.sectionTitle}>基本信息</Text>
 
                 {/* Row 1: Dates + Flight No (FLIGHT only — placed here to trigger API early) */}
                 <View style={styles.row}>
                     <View style={styles.flexField}>
-                        <Text style={styles.inputLabel}>Schd Date</Text>
+                        <Text style={styles.inputLabel}>计划日期 Schd Date</Text>
                         <TextInput
                             style={[styles.textInput, fieldError('schd_date') && styles.inputError]}
                             value={shared.schdDate}
@@ -666,7 +642,7 @@ export const DualTrackForm: React.FC<Props> = ({
                     <View style={styles.gap} />
                     <View style={styles.flexField}>
                         <Text style={styles.inputLabel}>
-                            Actl Date *{'  '}
+                            实际日期 Actl Date *{'  '}
                             <Text style={styles.dateEchoText}>{shared.actlDate}</Text>
                         </Text>
                         <SmartDatePicker
@@ -679,7 +655,7 @@ export const DualTrackForm: React.FC<Props> = ({
                         <>
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>Flight No.</Text>
+                                <Text style={styles.inputLabel}>航班号 Flt No.</Text>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                     <TextInput
                                         style={[styles.textInput, { flex: 1 }]}
@@ -710,7 +686,7 @@ export const DualTrackForm: React.FC<Props> = ({
                 <View style={styles.row}>
                     <View style={styles.flexField}>
                         <Text style={[styles.inputLabel, fieldError('acft_type') && { color: COLORS.error }]}>
-                            A/C Type *
+                            机型 A/C Type *
                         </Text>
                         <ComboInput
                             value={shared.acftType}
@@ -725,11 +701,9 @@ export const DualTrackForm: React.FC<Props> = ({
                         <>
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
-                                <Text style={[styles.inputLabel, fieldError('reg_no') && { color: COLORS.error }]}>
-                                    Reg No. *
-                                </Text>
+                                <Text style={styles.inputLabel}>登记号 Reg No.</Text>
                                 <TextInput
-                                    style={[styles.textInput, fieldError('reg_no') && styles.inputError]}
+                                    style={styles.textInput}
                                     value={shared.regNo}
                                     onChangeText={v => updateShared({ regNo: v.toUpperCase() })}
                                     placeholder="B-6120"
@@ -737,7 +711,6 @@ export const DualTrackForm: React.FC<Props> = ({
                                     autoCapitalize="characters"
                                     testID="input-reg-no"
                                 />
-                                {fieldError('reg_no') && <Text style={styles.inlineError}>{fieldError('reg_no')}</Text>}
                             </View>
                         </>
                     )}
@@ -749,12 +722,12 @@ export const DualTrackForm: React.FC<Props> = ({
                 <>
                     {/* Route */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Route (DEP-ARR)</Text>
+                        <Text style={styles.sectionTitle}>航段 Route</Text>
                         <View style={styles.row}>
                             <View style={styles.flexField}>
-                                <Text style={[styles.inputLabel, fieldError('dep_icao') && { color: COLORS.error }]}>DEP *</Text>
+                                <Text style={styles.inputLabel}>出发站 DEP</Text>
                                 <TextInput
-                                    style={[styles.textInput, fieldError('dep_icao') && styles.inputError]}
+                                    style={styles.textInput}
                                     value={flight.depIcao}
                                     onChangeText={v => {
                                         const icao = v.toUpperCase();
@@ -768,13 +741,12 @@ export const DualTrackForm: React.FC<Props> = ({
                                     autoCapitalize="characters"
                                     testID="input-dep-icao"
                                 />
-                                {fieldError('dep_icao') && <Text style={styles.inlineError}>{fieldError('dep_icao')}</Text>}
                             </View>
                             <Text style={styles.arrow}>→</Text>
                             <View style={styles.flexField}>
-                                <Text style={[styles.inputLabel, fieldError('arr_icao') && { color: COLORS.error }]}>ARR *</Text>
+                                <Text style={styles.inputLabel}>到达站 ARR</Text>
                                 <TextInput
-                                    style={[styles.textInput, fieldError('arr_icao') && styles.inputError]}
+                                    style={styles.textInput}
                                     value={flight.arrIcao}
                                     onChangeText={v => {
                                         const icao = v.toUpperCase();
@@ -787,7 +759,6 @@ export const DualTrackForm: React.FC<Props> = ({
                                     autoCapitalize="characters"
                                     testID="input-arr-icao"
                                 />
-                                {fieldError('arr_icao') && <Text style={styles.inlineError}>{fieldError('arr_icao')}</Text>}
                             </View>
                         </View>
 
@@ -795,15 +766,15 @@ export const DualTrackForm: React.FC<Props> = ({
                         {(depHasDst || arrHasDst) && (
                             <View style={styles.dstBanner}>
                                 <Text style={styles.dstBannerTitle}>
-                                    💡 DST Alert: Daylight Saving Time may apply
+                                    💡 时差提示：可能实行夏令时 (DST)
                                 </Text>
                                 <Text style={styles.dstBannerText}>
-                                    Auto-detected UTC offset is for reference. Verify and adjust as needed ⏷.
+                                    系统推算 UTC 偏移量仅供参考，请核对并按需微调 ⏷。
                                 </Text>
                                 {depHasDst && (
                                     <View style={styles.dstOffsetRow}>
                                         <Text style={styles.dstOffsetLabel}>
-                                            DEP {flight.depIcao} Offset:
+                                            DEP {flight.depIcao} 偏移:
                                             {depOffsetOverride >= 0 ? ' UTC+' : ' UTC'}
                                             {(depOffsetOverride / 60).toFixed(1)}h
                                         </Text>
@@ -826,7 +797,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                 {arrHasDst && (
                                     <View style={styles.dstOffsetRow}>
                                         <Text style={styles.dstOffsetLabel}>
-                                            ARR {flight.arrIcao} Offset:
+                                            ARR {flight.arrIcao} 偏移:
                                             {arrOffsetOverride >= 0 ? ' UTC+' : ' UTC'}
                                             {(arrOffsetOverride / 60).toFixed(1)}h
                                         </Text>
@@ -852,9 +823,9 @@ export const DualTrackForm: React.FC<Props> = ({
 
                     {/* ── 时刻与运行数据 Time & Operations (Phase 8 consolidated card) ── */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Time & Operations</Text>
+                        <Text style={styles.sectionTitle}>时刻与运行数据 Time & Operations</Text>
                         <Text style={styles.sectionHint}>
-                            Auto-estimation default: OFF = T/O - 10 mins, ON = LDG + 10 mins.
+                            填写起飞 (T/O) / 着陆 (LDG) 时刻后，滑出 (OFF) / 滑入 (ON) 时刻将自动推算（±10/5 分钟）
                         </Text>
 
                         {/* Four-Point Time Axis */}
@@ -908,7 +879,7 @@ export const DualTrackForm: React.FC<Props> = ({
                             </View>
                             <View style={styles.timeDataCellInput}>
                                 <Text style={styles.inputLabel}>
-                                    {showNightHint ? '🌙 Night (min)' : 'Night (min)'}
+                                    {showNightHint ? '🌙 夜航 Night (分)' : '夜航 Night (分)'}
                                 </Text>
                                 <TextInput
                                     style={[styles.textInput, showNightHint && styles.nightHintInput]}
@@ -921,7 +892,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                 />
                             </View>
                             <View style={styles.timeDataCellInput}>
-                                <Text style={styles.inputLabel}>Instrument (min)</Text>
+                                <Text style={styles.inputLabel}>仪表 Inst (分)</Text>
                                 <TextInput
                                     style={styles.textInput}
                                     value={flight.instrumentRaw}
@@ -936,34 +907,34 @@ export const DualTrackForm: React.FC<Props> = ({
 
                         {/* ── PF/PM Landing Auto-Link ─────────────────────────────── */}
                         <View style={styles.sectionDivider} />
-                        <Text style={styles.sectionSubTitle}>T/O & LDG Count</Text>
+                        <Text style={styles.sectionSubTitle}>起飞/着陆次数 T/O & LDG</Text>
                         {!isManualLandings ? (
                             flight.pilotRole === 'PF' ? (
                                 <View style={styles.pfLandingBanner}>
                                     <Text style={styles.pfLandingBannerText}>
-                                        ✓ Auto-counted 1
-                                        {(isNightHintTime(flight.ldgRaw) || isNightHintTime(flight.onRaw)) ? ' Night' : ' Day'}
-                                        {' '}T/O & LDG
+                                        ✓ 已自动计入 1 次
+                                        {(isNightHintTime(flight.ldgRaw) || isNightHintTime(flight.onRaw)) ? '夜间' : '昼间'}
+                                        起飞与着陆
                                     </Text>
                                     <TouchableOpacity
                                         onPress={() => setIsManualLandings(true)}
                                         testID="btn-manual-landings"
                                     >
-                                        <Text style={styles.manualLandingsLink}>Edit</Text>
+                                        <Text style={styles.manualLandingsLink}>手动修改</Text>
                                     </TouchableOpacity>
                                 </View>
                             ) : (
                                 <View style={styles.autoLandingPlaceholder}>
                                     <Text style={styles.autoLandingPlaceholderText}>
                                         {flight.pilotRole === 'PM'
-                                            ? 'PM: no T/O & LDG counted'
-                                            : 'Select PF to auto-count T/O & LDG'}
+                                            ? 'PM 不计入常规起落次数'
+                                            : '选择 PF 后将自动计入起落次数'}
                                     </Text>
                                     <TouchableOpacity
                                         onPress={() => setIsManualLandings(true)}
                                         testID="btn-manual-landings"
                                     >
-                                        <Text style={styles.manualLandingsLink}>Manual</Text>
+                                        <Text style={styles.manualLandingsLink}>手动填写</Text>
                                     </TouchableOpacity>
                                 </View>
                             )
@@ -971,14 +942,14 @@ export const DualTrackForm: React.FC<Props> = ({
                             <View>
                                 <View style={styles.row}>
                                     <LandingCounter
-                                        label="Day T/O"
+                                        label="昼间起飞 Day T/O"
                                         value={flight.dayTo}
                                         onChange={v => updateFlight({ dayTo: v })}
                                         testIDBase="day-to"
                                     />
                                     <View style={styles.gap} />
                                     <LandingCounter
-                                        label="Night T/O"
+                                        label="夜间起飞 Night T/O"
                                         value={flight.nightTo}
                                         onChange={v => updateFlight({ nightTo: v })}
                                         testIDBase="night-to"
@@ -986,14 +957,14 @@ export const DualTrackForm: React.FC<Props> = ({
                                 </View>
                                 <View style={[styles.row, { marginTop: 8 }]}>
                                     <LandingCounter
-                                        label="Day LDG"
+                                        label="昼间着陆 Day LDG"
                                         value={flight.dayLdg}
                                         onChange={v => updateFlight({ dayLdg: v })}
                                         testIDBase="day-ldg"
                                     />
                                     <View style={styles.gap} />
                                     <LandingCounter
-                                        label="Night LDG"
+                                        label="夜间着陆 Night LDG"
                                         value={flight.nightLdg}
                                         onChange={v => updateFlight({ nightLdg: v })}
                                         testIDBase="night-ldg"
@@ -1004,7 +975,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                     onPress={() => setIsManualLandings(false)}
                                     testID="btn-cancel-manual-landings"
                                 >
-                                    <Text style={styles.cancelManualBtnText}>↩ Reset to Auto</Text>
+                                    <Text style={styles.cancelManualBtnText}>↩ 取消手动修改（重置为自动）</Text>
                                 </TouchableOpacity>
                             </View>
                         )}
@@ -1012,34 +983,25 @@ export const DualTrackForm: React.FC<Props> = ({
 
                     {/* Role Times */}
                     <View style={styles.section}>
-                        <View style={styles.experienceHeaderRow}>
-                            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Experience Time</Text>
-                            {blockTimeMin !== null && (
-                                <View style={[styles.stickyBlockBadge, roleTimeSum > blockTimeMin ? styles.stickyBlockBadgeError : {}]}>
-                                    <Text style={[styles.stickyBlockText, roleTimeSum > blockTimeMin ? styles.stickyBlockTextError : {}]}>
-                                        Block: {minutesToHHMM(blockTimeMin)}
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
+                        <Text style={styles.sectionTitle}>经历时间 Experience</Text>
                         <Text style={styles.sectionHint}>
-                            Total experience must not exceed Block Time.
+                            经历时间各项之和不得超过飞行时间（Block Time）
                         </Text>
 
                         {/* ── My Role: capacity role selector + PF/PM toggle ── */}
                         <View style={styles.myRoleCard}>
-                            <Text style={styles.myRoleTitle}>My Role</Text>
+                            <Text style={styles.myRoleTitle}>我的角色 My Role</Text>
                             <Text style={styles.myRoleHint}>
-                                Block Time auto-fills into the selected role field. Editable.
+                                选择角色后，飞行时间（Block Time）将自动填入对应字段（可手动修改）
                             </Text>
 
                             {/* 4-way capacity role selector */}
                             <View style={styles.capacityRoleRow}>
                                 {([
-                                    { role: 'PIC', label: 'PIC', sub: 'Captain' },
-                                    { role: 'PIC_US', label: 'PIC U/S', sub: 'Supervised PIC' },
-                                    { role: 'SPIC', label: 'SPIC', sub: 'Student PIC' },
-                                    { role: 'SIC', label: 'SIC', sub: 'First Officer' },
+                                    { role: 'PIC', label: 'PIC', sub: '机长' },
+                                    { role: 'PIC_US', label: 'PIC U/S', sub: '监视下履行机长职责' },
+                                    { role: 'SPIC', label: 'SPIC', sub: '见习机长' },
+                                    { role: 'SIC', label: 'SIC', sub: '副驾驶' },
                                 ] as { role: CapacityRole; label: string; sub: string }[]).map(({ role, label, sub }) => (
                                     <TouchableOpacity
                                         key={role}
@@ -1068,7 +1030,7 @@ export const DualTrackForm: React.FC<Props> = ({
 
                             {/* PF / PM toggle — manipulation role, independent */}
                             <View style={styles.pfPmRow}>
-                                <Text style={styles.pfPmLabel}>Control Duty</Text>
+                                <Text style={styles.pfPmLabel}>操纵职责（可叠选）</Text>
                                 <View style={styles.pfPmBtns}>
                                     {(['PF', 'PM'] as const).map(r => (
                                         <TouchableOpacity
@@ -1086,7 +1048,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                                 styles.pfPmBtnText,
                                                 flight.pilotRole === r && styles.pfPmBtnTextActive,
                                             ]}>
-                                                {r === 'PF' ? 'Pilot Flying (PF)' : 'Pilot Monitoring (PM)'}
+                                                {r === 'PF' ? '操纵驾驶员（PF）' : '监控驾驶员（PM）'}
                                             </Text>
                                         </TouchableOpacity>
                                     ))}
@@ -1097,16 +1059,16 @@ export const DualTrackForm: React.FC<Props> = ({
                         {/* ── Time buckets (all 6 fields visible, matching role highlighted) ── */}
                         <View style={styles.row}>
                             {([
-                                { key: 'picRaw', role: 'PIC', label: 'PIC', testID: 'input-pic', errKey: 'pic_min' },
+                                { key: 'picRaw', role: 'PIC', label: '机长 PIC', testID: 'input-pic', errKey: 'pic_min' },
                                 { key: 'picUsRaw', role: 'PIC_US', label: 'PIC U/S', testID: 'input-pic-us', errKey: undefined },
-                                { key: 'spicRaw', role: 'SPIC', label: 'SPIC', testID: 'input-spic', errKey: undefined },
+                                { key: 'spicRaw', role: 'SPIC', label: '见习机长 SPIC', testID: 'input-spic', errKey: undefined },
                             ] as { key: keyof FlightFields; role: CapacityRole; label: string; testID: string; errKey?: string }[]).map(({ key, role, label, testID, errKey }) => (
                                 <View key={key} style={styles.roleTimeField}>
                                     <Text style={[
                                         styles.inputLabel,
                                         flight.capacityRole === role && styles.inputLabelHighlight,
                                     ]}>
-                                        {label} (min)
+                                        {label} (分)
                                     </Text>
                                     <TextInput
                                         style={[
@@ -1126,16 +1088,16 @@ export const DualTrackForm: React.FC<Props> = ({
                         </View>
                         <View style={styles.row}>
                             {([
-                                { key: 'sicRaw', role: 'SIC', label: 'SIC', testID: 'input-sic', errKey: undefined },
-                                { key: 'dualRaw', role: null, label: 'Dual', testID: 'input-dual', errKey: undefined },
-                                { key: 'instructorRaw', role: null, label: 'Instructor', testID: 'input-instructor', errKey: undefined },
+                                { key: 'sicRaw', role: 'SIC', label: '副驾驶 SIC', testID: 'input-sic', errKey: undefined },
+                                { key: 'dualRaw', role: null, label: '带飞 Dual', testID: 'input-dual', errKey: undefined },
+                                { key: 'instructorRaw', role: null, label: '教员 Instructor', testID: 'input-instructor', errKey: undefined },
                             ] as { key: keyof FlightFields; role: CapacityRole | null; label: string; testID: string; errKey?: string }[]).map(({ key, role, label, testID }) => (
                                 <View key={key} style={styles.roleTimeField}>
                                     <Text style={[
                                         styles.inputLabel,
                                         role && flight.capacityRole === role && styles.inputLabelHighlight,
                                     ]}>
-                                        {label} (min)
+                                        {label} (分)
                                     </Text>
                                     <TextInput
                                         style={[
@@ -1165,7 +1127,7 @@ export const DualTrackForm: React.FC<Props> = ({
 
                     {/* Approach Type (moved out of old "Role & Approach" section) */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Approach Type</Text>
+                        <Text style={styles.sectionTitle}>进近方式 Approach Type</Text>
                         <OptionPicker
                             label=""
                             value={flight.approachType}
@@ -1183,39 +1145,36 @@ export const DualTrackForm: React.FC<Props> = ({
             {dutyType === 'SIMULATOR' && (
                 <>
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Simulator Info</Text>
+                        <Text style={styles.sectionTitle}>模拟机信息</Text>
 
                         <View style={styles.row}>
                             <View style={styles.flexField}>
-                                <Text style={[styles.inputLabel, fieldError('sim_no') && { color: COLORS.error }]}>SIM No. *</Text>
+                                <Text style={styles.inputLabel}>模拟机编号 SIM No.</Text>
                                 <TextInput
-                                    style={[styles.textInput, fieldError('sim_no') && styles.inputError]}
+                                    style={styles.textInput}
                                     value={sim.simNo}
                                     onChangeText={v => updateSim({ simNo: v })}
                                     placeholder="SIM-01"
                                     placeholderTextColor={COLORS.placeholder}
                                     testID="input-sim-no"
                                 />
-                                {fieldError('sim_no') && <Text style={styles.inlineError}>{fieldError('sim_no')}</Text>}
                             </View>
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
-                                <Text style={[styles.inputLabel, fieldError('sim_cat') && { color: COLORS.error }]}>FSTD Level *</Text>
+                                <Text style={styles.inputLabel}>FSTD 鉴定等级</Text>
                                 <OptionPicker
                                     label=""
                                     value={sim.simCat}
                                     onChange={v => updateSim({ simCat: v })}
                                     options={SIM_CAT_OPTIONS}
-                                    hasError={!!fieldError('sim_cat')}
                                     testID="picker-sim-cat"
                                 />
-                                {fieldError('sim_cat') && <Text style={styles.inlineError}>{fieldError('sim_cat')}</Text>}
                             </View>
                         </View>
 
                         <View style={styles.row}>
                             <View style={styles.flexField}>
-                                <Text style={styles.inputLabel}>Training Agency</Text>
+                                <Text style={styles.inputLabel}>训练机构</Text>
                                 <TextInput
                                     style={styles.textInput}
                                     value={sim.trainingAgency}
@@ -1227,24 +1186,22 @@ export const DualTrackForm: React.FC<Props> = ({
                             </View>
                             <View style={styles.gap} />
                             <View style={styles.flexField}>
-                                <Text style={[styles.inputLabel, fieldError('training_type') && { color: COLORS.error }]}>Training Type *</Text>
+                                <Text style={styles.inputLabel}>训练种类 Training Type</Text>
                                 <OptionPicker
                                     label=""
                                     value={sim.trainingType}
                                     onChange={v => updateSim({ trainingType: v })}
                                     options={TRAINING_TYPE_OPTIONS}
-                                    hasError={!!fieldError('training_type')}
                                     testID="picker-training-type"
                                 />
-                                {fieldError('training_type') && <Text style={styles.inlineError}>{fieldError('training_type')}</Text>}
                             </View>
                         </View>
 
                         {/* SIM From / To */}
-                        <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Training Period</Text>
+                        <Text style={[styles.sectionTitle, { marginTop: 16 }]}>训练时段</Text>
                         <View style={styles.timeAxisRow}>
                             <MaskedTimeInput
-                                label="From"
+                                label="起始"
                                 value={sim.fromRaw}
                                 onChange={v => updateSim({ fromRaw: v })}
                                 onBlur={handleSimTimeBlur}
@@ -1254,7 +1211,7 @@ export const DualTrackForm: React.FC<Props> = ({
                                 <Text style={styles.arrow}>→</Text>
                             </View>
                             <MaskedTimeInput
-                                label="To"
+                                label="结束"
                                 value={sim.toRaw}
                                 onChange={v => updateSim({ toRaw: v })}
                                 onBlur={handleSimTimeBlur}
@@ -1264,7 +1221,7 @@ export const DualTrackForm: React.FC<Props> = ({
 
                         {blockTimeMin !== null && (
                             <View style={styles.blockTimeRow}>
-                                <Text style={styles.blockTimeLabel}>Duration:</Text>
+                                <Text style={styles.blockTimeLabel}>训练时长：</Text>
                                 <Text style={styles.blockTimeValue}>
                                     {minutesToHHMM(blockTimeMin)}
                                 </Text>
@@ -1283,7 +1240,7 @@ export const DualTrackForm: React.FC<Props> = ({
                     onPress={onCancel}
                     testID="btn-cancel"
                 >
-                    <Text style={styles.cancelText}>Cancel</Text>
+                    <Text style={styles.cancelText}>取消</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1291,7 +1248,7 @@ export const DualTrackForm: React.FC<Props> = ({
                     onPress={handleSave}
                     testID="btn-save"
                 >
-                    <Text style={styles.saveText}>Save Record →</Text>
+                    <Text style={styles.saveText}>保存记录 →</Text>
                 </TouchableOpacity>
             </View>
         </ScrollView>
@@ -1823,33 +1780,6 @@ const styles = StyleSheet.create({
     },
     timeDataValueActive: {
         color: COLORS.success,
-    },
-
-    experienceHeaderRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    stickyBlockBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 4,
-        backgroundColor: '#1E3A8A',
-        borderWidth: 1,
-        borderColor: '#3B82F6',
-    },
-    stickyBlockBadgeError: {
-        backgroundColor: '#7F1D1D',
-        borderColor: '#EF4444',
-    },
-    stickyBlockText: {
-        color: '#DBEAFE',
-        fontSize: 12,
-        fontWeight: '700',
-    },
-    stickyBlockTextError: {
-        color: '#FEE2E2',
     },
 
     // ── Phase 8: PF/PM landing auto-link UI ──────────────────────────────────
