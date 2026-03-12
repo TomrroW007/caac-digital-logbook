@@ -490,11 +490,10 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
     // ── 鉴权状态 ──────────────────────────────────────────────────────────────
     const [session, setSession] = useState<Session | null>(null);
     const [showAuthModal, setShowAuthModal] = useState(false);
-    const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+    const [authStep, setAuthStep] = useState<'EMAIL' | 'OTP'>('EMAIL'); // 状态机：填邮箱 -> 填验证码
     const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
-    const [focusedInput, setFocusedInput] = useState<'email' | 'password' | null>(null);
+    const [token, setToken] = useState(''); // 6位验证码
+    const [focusedInput, setFocusedInput] = useState<'email' | 'token' | null>(null);
     const [authLoading, setAuthLoading] = useState(false);
     const [authError, setAuthError] = useState<string | null>(null);
 
@@ -693,69 +692,51 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
     };
 
     // ── 云端同步 ──────────────────────────────────────────────────────────────
-    const handleSignIn = async () => {
-        if (!email.trim()) {
-            setAuthError('请输入邮箱');
-            return;
-        }
-        if (!password) {
-            setAuthError('请输入密码');
-            return;
-        }
+    // 1. 发送 6 位验证码到邮箱
+    const handleSendOTP = async () => {
+        if (!email.trim()) return setAuthError('请输入邮箱');
         const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-        if (!emailRegex.test(email.trim())) {
-            setAuthError('邮箱格式不正确');
-            return;
-        }
+        if (!emailRegex.test(email.trim())) return setAuthError('邮箱格式不正确');
+
         setAuthLoading(true);
         setAuthError(null);
         try {
-            const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-            if (error) {
-                setAuthError(error.message);
-            } else {
-                setShowAuthModal(false);
-                setEmail('');
-                setPassword('');
-                // Automatically trigger sync on successful login
-                handleSync();
-            }
+            const { error } = await supabase.auth.signInWithOtp({
+                email: email.trim(),
+                options: { shouldCreateUser: true }, // 允许新用户直接通过验证码创建账号
+            });
+            if (error) throw error;
+            setAuthStep('OTP'); // 切换至验证码输入界面
+        } catch (err: any) {
+            setAuthError(err.message);
         } finally {
             setAuthLoading(false);
         }
     };
 
-    const handleSignUp = async () => {
-        if (!email.trim()) {
-            setAuthError('请输入邮箱');
-            return;
-        }
-        if (!password) {
-            setAuthError('请输入密码');
-            return;
-        }
-        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-        if (!emailRegex.test(email.trim())) {
-            setAuthError('邮箱格式不正确');
-            return;
-        }
-        if (password.length < 6) {
-            setAuthError('密码至少 6 位');
-            return;
-        }
+    // 2. 校验验证码并完成登录
+    const handleVerifyOTP = async () => {
+        if (!token.trim()) return setAuthError('请输入验证码');
+
         setAuthLoading(true);
         setAuthError(null);
         try {
-            const { error } = await supabase.auth.signUp({ email: email.trim(), password });
-            if (error) {
-                setAuthError(error.message);
-            } else {
-                crossAlert(
-                    '注册成功',
-                    '请查收验证邮件并点击链接激活账号，然后回到此页面登录。',
-                    [{ text: '知道了', onPress: () => { setShowAuthModal(false); setEmail(''); setPassword(''); } }],
-                );
-            }
+            const { error } = await supabase.auth.verifyOtp({
+                email: email.trim(),
+                token: token.trim(),
+                type: 'email',
+            });
+            if (error) throw error;
+
+            // 验证成功：清理状态并关闭弹窗
+            setShowAuthModal(false);
+            setAuthStep('EMAIL');
+            setEmail('');
+            setToken('');
+            // 自动触发云端同步逻辑
+            handleSync();
+        } catch (err: any) {
+            setAuthError('验证码错误或已过期，请重试');
         } finally {
             setAuthLoading(false);
         }
@@ -1055,7 +1036,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 visible={showAuthModal}
                 transparent
                 animationType="slide"
-                onRequestClose={() => setShowAuthModal(false)}
+                onRequestClose={() => { setShowAuthModal(false); setAuthStep('EMAIL'); setAuthError(null); }}
             >
                 <KeyboardAvoidingView
                     style={styles.modalOverlay}
@@ -1064,99 +1045,91 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                     <View style={styles.modalCard}>
                         {/* Header */}
                         <Text style={styles.modalTitle}>
-                            {authMode === 'signin' ? <><Ionicons name="lock-closed-outline" size={20} />{' Sign In'}</> : <><Ionicons name="person-add-outline" size={20} />{' Create Account'}</>}
+                            <Ionicons name="cloud-done-outline" size={20} /> 云端同步验证
                         </Text>
                         <Text style={styles.authHint}>
-                            {authMode === 'signin'
-                                ? 'Sign in to securely back up your data to the cloud.'
-                                : 'Register a free account for secure data sync.'
-                            }
+                            {authStep === 'EMAIL' ? '请输入邮箱获取 6 位安全验证码' : `已发送验证码至：${email}`}
                         </Text>
 
                         <View style={styles.authDivider} />
 
-                        <TextInput
-                            style={[
-                                styles.authInput,
-                                focusedInput === 'email' && styles.authInputFocused,
-                                Platform.OS === 'web' && { outlineStyle: 'none' } as any
-                            ]}
-                            placeholder="Email"
-                            placeholderTextColor={COLORS.textSecondary}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            value={email}
-                            onChangeText={setEmail}
-                            onFocus={() => setFocusedInput('email')}
-                            onBlur={() => setFocusedInput(null)}
-                            testID="input-email"
-                        />
-                        <View style={[
-                            styles.authInput, 
-                            styles.passwordInputWrapper,
-                            focusedInput === 'password' && styles.authInputFocused
-                        ]}>
+                        {/* 表单输入区域 */}
+                        {authStep === 'EMAIL' ? (
                             <TextInput
                                 style={[
-                                    styles.passwordInput,
-                                    Platform.OS === 'web' && { outlineStyle: 'none' } as any
+                                    styles.authInput,
+                                    focusedInput === 'email' && styles.authInputFocused,
+                                    Platform.OS === 'web' && { outlineStyle: 'none' } as any,
                                 ]}
-                                placeholder="Password (min 6 chars)"
+                                placeholder="工作邮箱"
                                 placeholderTextColor={COLORS.textSecondary}
-                                secureTextEntry={!showPassword}
+                                keyboardType="email-address"
                                 autoCapitalize="none"
                                 autoCorrect={false}
-                                value={password}
-                                onChangeText={setPassword}
-                                onFocus={() => setFocusedInput('password')}
+                                value={email}
+                                onChangeText={setEmail}
+                                onFocus={() => setFocusedInput('email')}
                                 onBlur={() => setFocusedInput(null)}
-                                testID="input-password"
+                                testID="input-email"
                             />
-                            <TouchableOpacity
-                                style={styles.eyeIconContainer}
-                                onPress={() => setShowPassword(p => !p)}
-                                testID="btn-toggle-password-visibility"
-                            >
-                                <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={COLORS.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
+                        ) : (
+                            <TextInput
+                                style={[
+                                    styles.authInput,
+                                    focusedInput === 'token' && styles.authInputFocused,
+                                    Platform.OS === 'web' && { outlineStyle: 'none' } as any,
+                                ]}
+                                placeholder="请输入 6 位数字验证码"
+                                placeholderTextColor={COLORS.textSecondary}
+                                keyboardType="number-pad"
+                                maxLength={6}
+                                value={token}
+                                onChangeText={setToken}
+                                onFocus={() => setFocusedInput('token')}
+                                onBlur={() => setFocusedInput(null)}
+                                testID="input-otp-token"
+                            />
+                        )}
 
+                        {/* 错误提示 */}
                         {authError && (
                             <View style={styles.authErrorBox}>
                                 <Text style={styles.authErrorText}><Ionicons name="warning" size={14} /> {authError}</Text>
                             </View>
                         )}
 
+                        {/* 主操作按钮 */}
                         <TouchableOpacity
                             style={[styles.authPrimaryBtn, authLoading && styles.exportCardDisabled]}
-                            onPress={authMode === 'signin' ? handleSignIn : handleSignUp}
+                            onPress={authStep === 'EMAIL' ? handleSendOTP : handleVerifyOTP}
                             disabled={authLoading}
                             testID="btn-auth-submit"
                         >
                             {authLoading
                                 ? <ActivityIndicator size="small" color="#fff" />
                                 : <Text style={styles.authPrimaryBtnText}>
-                                    {authMode === 'signin' ? 'Sign In' : 'Sign Up'}
+                                    {authStep === 'EMAIL' ? '获取验证码' : '验证并登录'}
                                 </Text>
                             }
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                            onPress={() => { setAuthMode(m => m === 'signin' ? 'signup' : 'signin'); setAuthError(null); }}
-                            testID="btn-toggle-auth-mode"
-                        >
-                            <Text style={styles.authToggleText}>
-                                {authMode === 'signin' ? "Don't have an account? Sign up free" : 'Already have an account? Sign in'}
-                            </Text>
-                        </TouchableOpacity>
+                        {/* 辅助操作 */}
+                        {authStep === 'OTP' && (
+                            <TouchableOpacity
+                                onPress={() => { setAuthStep('EMAIL'); setAuthError(null); }}
+                                style={{ marginBottom: 10 }}
+                                testID="btn-back-to-email"
+                            >
+                                <Text style={styles.authToggleText}>返回修改邮箱</Text>
+                            </TouchableOpacity>
+                        )}
 
                         <TouchableOpacity
                             style={styles.modalCancelBtn}
-                            onPress={() => setShowAuthModal(false)}
+                            onPress={() => { setShowAuthModal(false); setAuthStep('EMAIL'); setAuthError(null); }}
                             testID="btn-auth-cancel"
                         >
-                            <Text style={styles.modalCancelText}>Cancel</Text>
+                            <Text style={styles.modalCancelText}>取消</Text>
                         </TouchableOpacity>
                     </View>
                 </KeyboardAvoidingView>
@@ -1411,21 +1384,6 @@ const styles = StyleSheet.create({
     authInputFocused: {
         borderColor: COLORS.primary,
         backgroundColor: '#15243B',
-    },
-    passwordInputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 0,
-        paddingRight: 8,
-    },
-    passwordInput: {
-        flex: 1,
-        color: COLORS.text,
-        fontSize: 15,
-        paddingVertical: 14,
-    },
-    eyeIconContainer: {
-        padding: 8,
     },
     authErrorBox: {
         backgroundColor: '#2A0E0E',
