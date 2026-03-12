@@ -703,10 +703,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
         try {
             const { error } = await supabase.auth.signInWithOtp({
                 email: email.trim(),
-                options: {
-                    shouldCreateUser: true,  // 允许新用户直接通过验证码创建账号
-                    emailRedirectTo: undefined, // 明确禁用 Magic Link 跳转，强制走 OTP Code 流程
-                },
+                options: { shouldCreateUser: true }, // 允许新用户直接通过验证码创建账号
             });
             if (error) throw error;
             setAuthStep('OTP'); // 切换至验证码输入界面

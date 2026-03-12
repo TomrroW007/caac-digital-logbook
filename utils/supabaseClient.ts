@@ -105,11 +105,8 @@ export const supabase = isSupabaseConfigured()
             if (prop === 'auth') {
                 return {
                     getUser: async () => ({ data: { user: null }, error: new Error('Supabase 未配置') }),
-                    getSession: async () => ({ data: { session: null }, error: null }),
                     onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
                     signInWithPassword: async () => ({ data: null, error: new Error('Supabase 未配置') }),
-                    signInWithOtp: async () => ({ data: null, error: new Error('Supabase 未配置') }),
-                    verifyOtp: async () => ({ data: null, error: new Error('Supabase 未配置') }),
                     signOut: async () => ({ error: null }),
                 };
             }
