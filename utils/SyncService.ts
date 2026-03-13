@@ -16,8 +16,10 @@
  */
 
 import { synchronize } from '@nozbe/watermelondb/sync';
+import { Q } from '@nozbe/watermelondb';
 import { database } from '../database';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { LogbookRecord } from '../model/LogbookRecord';
 
 // ─── 同步状态类型 ─────────────────────────────────────────────────────────────
 
@@ -47,6 +49,75 @@ const writeSyncStatus = (status: SyncStatus): void => {
     _currentSyncStatus = status;
 };
 
+export type LocalOwnerConsistency = {
+    totalRecords: number;
+    ownerIds: string[];
+    conflictRecords: number;
+    hasConflict: boolean;
+};
+
+/**
+ * 检查当前账号与本地记录 owner_user_id 是否一致。
+ * 仅当存在“已绑定且不属于当前账号”的记录时视为冲突。
+ */
+export const checkLocalOwnerConsistency = async (currentUserId: string): Promise<LocalOwnerConsistency> => {
+    const rows = await database
+        .get<LogbookRecord>('logbook_records')
+        .query(Q.where('is_deleted', false))
+        .fetch();
+
+    const ownerSet = new Set<string>();
+    let conflictRecords = 0;
+
+    rows.forEach((r) => {
+        const owner = (r.ownerUserId ?? '').trim();
+        if (!owner) return;
+        ownerSet.add(owner);
+        if (owner !== currentUserId) {
+            conflictRecords += 1;
+        }
+    });
+
+    return {
+        totalRecords: rows.length,
+        ownerIds: Array.from(ownerSet),
+        conflictRecords,
+        hasConflict: conflictRecords > 0,
+    };
+};
+
+/** 物理清空本地全部飞行记录，用于账号切换保护。 */
+export const clearAllLocalLogbookRecords = async (): Promise<number> => {
+    const collection = database.get<LogbookRecord>('logbook_records');
+    const rows = await collection.query().fetch();
+    if (rows.length === 0) return 0;
+
+    await database.write(async () => {
+        await database.batch(...rows.map(r => r.prepareDestroyPermanently()));
+    });
+
+    return rows.length;
+};
+
+const bindUnownedLocalRecords = async (currentUserId: string): Promise<void> => {
+    const rows = await database
+        .get<LogbookRecord>('logbook_records')
+        .query(Q.where('is_deleted', false))
+        .fetch();
+
+    const unownedRows = rows.filter((r) => !(r.ownerUserId ?? '').trim());
+    if (unownedRows.length === 0) return;
+
+    await database.write(async () => {
+        await database.batch(
+            ...unownedRows.map(r => r.prepareUpdate((rec) => {
+                rec.ownerUserId = currentUserId;
+                rec.lastModifiedAt = new Date().toISOString();
+            })),
+        );
+    });
+};
+
 // ─── 主同步函数 ───────────────────────────────────────────────────────────────
 
 /**
@@ -69,6 +140,8 @@ export const syncWithCloud = async (): Promise<SyncStatus> => {
         return status;
     }
     const userId = user.id;
+
+    await bindUnownedLocalRecords(userId);
 
     // 标记同步中
     writeSyncStatus({ state: 'syncing' });
@@ -97,7 +170,10 @@ export const syncWithCloud = async (): Promise<SyncStatus> => {
                 // 清除 WatermelonDB 不接受的内部元数据字段 + Supabase 服务端字段
                 const sanitize = (r: Record<string, any>) => {
                     const { _status, _changed, user_id, created_at, updated_at, ...clean } = r;
-                    return clean;
+                    return {
+                        ...clean,
+                        owner_user_id: userId,
+                    };
                 };
                 // 按 is_deleted 分流到 deleted / updated
                 const deleted = rows
@@ -124,10 +200,20 @@ export const syncWithCloud = async (): Promise<SyncStatus> => {
 
                 const { created = [], updated = [], deleted = [] } = logbook_records;
 
+                const changedRows = [...created, ...updated];
+                const conflicted = changedRows.filter((r: Record<string, any>) => {
+                    const owner = typeof r.owner_user_id === 'string' ? r.owner_user_id.trim() : '';
+                    return owner.length > 0 && owner !== userId;
+                });
+                if (conflicted.length > 0) {
+                    throw new Error('检测到本地记录属于其他账号，已阻止同步以避免数据污染');
+                }
+
                 // 合并 created + updated → upsert（Supabase 端以 id 为主键）
-                const upsertRows = [...created, ...updated].map(r => ({
+                const upsertRows = changedRows.map((r: Record<string, any>) => ({
                     ...r,
                     user_id: userId,
+                    owner_user_id: r.owner_user_id ?? userId,
                     // 确保 last_modified_at 总是字符串
                     last_modified_at: r.last_modified_at ?? new Date().toISOString(),
                 }));

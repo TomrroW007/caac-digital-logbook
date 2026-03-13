@@ -35,8 +35,24 @@ jest.mock('../../utils/supabaseClient', () => ({
     },
 }));
 
+const mockFetchLocalRows = jest.fn().mockResolvedValue([]);
+const mockQueryLocalRows = jest.fn().mockReturnValue({
+    fetch: mockFetchLocalRows,
+});
+const mockGetLocalCollection = jest.fn().mockReturnValue({
+    query: mockQueryLocalRows,
+});
+const mockDatabaseWrite = jest.fn(async (fn: () => Promise<void> | void) => {
+    await fn();
+});
+const mockDatabaseBatch = jest.fn();
+
 jest.mock('../../database', () => ({
-    database: {},
+    database: {
+        get: mockGetLocalCollection,
+        write: mockDatabaseWrite,
+        batch: mockDatabaseBatch,
+    },
 }));
 
 // WatermelonDB sync is mocked via __mocks__/@nozbe/watermelondb/sync.js
