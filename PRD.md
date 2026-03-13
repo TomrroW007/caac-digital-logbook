@@ -1,10 +1,10 @@
 
-# ✈️ 民航飞行员专属 LOGBOOK 产品需求文档 (PRD) V1.5 完整版
+# ✈️ 民航飞行员专属 LOGBOOK 产品需求文档 (PRD) V1.5.0 完整版
 
-**文档状态**：已冻结 (Frozen) - V1.5 包含 Phase 7 Supabase 双向云同步与 Phase 8 重构实施细节
+**文档状态**：Stable / Production-Ready (V1.5.0)
 **目标受众**：全栈独立开发者 (Solo Developer)  
 **合规基准**：严格遵循 CCAR-61部、CCAR-121部 及 ICAO 附件1  
-**核心原则**：双向云同步、离线绝对优先、全量 LT 极简录入、分钟制整数存储、动态双轨表单、双格式合规导出
+**核心原则**：双向云同步、离线绝对优先、全量 LT 极简录入、分钟制整数存储、动态双轨表单、双格式合规导出、OTP 登录闭环
 
 ### 📝 V1.5 Phase 7 更新记录 (Supabase 双向云同步闭环)
 
@@ -22,7 +22,7 @@
 18. **导出记录类型过滤**：Settings 页面新安 分段控制器，允许按 [ 全部 ] [ 真实飞行 ] [ 模拟机 ] 三种类型过滤导出。
 19. **导出时区报表**：支持 [ 北京时间 LT (UTC+8) ] 和 [ UTC ] 两种时标导出。LT_BEIJING 采用 `getTime() + 8*3600*1000` + `getUTCHours()` 方案，噀擦设备本地时区干扰，永远与设备所在地区无关。PDF 表鍏头动态展示 LT/UTC 标期。
 20. **全站选项组件 UI 规范约定**：全站所有的选项组件（包括机型、进近方式、PF/PM 角色）统一废弃横向滚动，采用 `flexWrap: 'wrap'` 的自适应流式布局，以彻底解决 Web PWA 端横向滚动体验差的问题。对于选项数量 `> 10` 的复杂枚举（如机型），**强制要求采用“分类 Tabs + `flexWrap` 动态渲染”的结构**，严防单一列表将首屏竖向占满（Wall of Buttons）。
-21. **版本升级**：应用版本号升级至 1.4.0 (Phase 8)。
+21. **版本升级**：应用版本号升级至 1.5.0 (Phase 9)。
 
 ### 📝 V1.3 Phase 6 更新记录 (Cloud Proxy & Auto-fill)
 
@@ -58,7 +58,7 @@
 
 ### 1.2 产品战略 (V1.5 范围)
 
-打造一款专业供飞行员个人使用的电子 LOGBOOK。 **V1.5 核心战略**：**“离线体验优先 + Supabase 强隔离安全同步闭环 + 局方标准双规导出”**。通过纯数字免冒号输入、带 DST 感知的离线时区计算，实现秒级合规录入，并直接输出可供局方盖章的标准化打印件，最终通过后台静默的军工级云端同步，保障数据零丢失。
+打造一款专业供飞行员个人使用的电子 LOGBOOK。 **V1.5.0 核心战略**：**“离线体验优先 + Supabase 强隔离安全同步闭环 + OTP 无密码登录 + 局方标准双规导出”**。通过纯数字免冒号输入、带 DST 感知的离线时区计算，实现秒级合规录入，并直接输出可供局方盖章的标准化打印件，最终通过后台静默的军工级云端同步，保障数据零丢失。
 
 ## 二、 系统架构设计 (System Architecture)
 
@@ -283,8 +283,23 @@
         
     -   在 DualTrackForm 实现航班号失焦自动填充（仅填空字段，不覆盖时间轴）。
 
--   **📍 Phase 7: Supabase 免费云端双向同步闭环**
+-   **📍 Phase 7: Supabase 免费云端双向同步闭环 (COMPLETED)**
     
-    -   集成 Supabase Auth。
+    -   集成 Supabase Auth (OTP Flow)。
     -   开发 `SyncService.ts`，基于 WatermelonDB `synchronize()` api 打造 pull / push 调度循环。
     -   在 Supabase 控制台完成 PostgreSQL 结构映射、RLS 行级安全设置以及针对 Client Clock Drift 的 `moddatetime` 时间同步触发器设定。
+
+-   **📍 Phase 8: 极速录入与多维导出重构 (COMPLETED)**
+
+    -   重构 `DualTrackForm` 优化字段布局，航班号提权。
+    -   实现 PF/PM 起落自动联动与空中时间自动推算。
+    -   Settings 页面新增出口过滤 [ 全部 ] [ 飞行 ] [ 模拟机 ] 及 [ UTC ] / [ 北京时间 ] 切换。
+    -   强制导出时区锁定，确保 CCAR-121 合规。
+
+-   **📍 Phase 9: Auth Resilience & UX Polish (COMPLETED)**
+
+    -   **无密码 OTP 登录**：采用 Supabase `signInWithOtp` 流程，彻底取代传统密码。
+    -   **验证状态持久化**：使用 `AsyncStorage` 缓存临时状态，防止 App 杀后台导致登录中断。
+    -   **防刷机制**：实现 60s 验证码发送倒计时限制。
+    -   **账号冲突防御**：实现多账号登录时的本地 WatermelonDB 数据保护提示，防止数据误覆盖。
+    -   **UI 微操**：Web 端表单 `outline: none` 去除白框，数字键盘自动聚焦优化。

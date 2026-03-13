@@ -1,4 +1,4 @@
-# ✈️ CAAC Digital Logbook（民航飞行员电子飞行经历记录本）
+# ✈️ CAAC Digital Logbook V1.5.0（民航飞行员电子飞行经历记录本）
 
 > 一款专为民航飞行员打造的离线优先 (Offline-First)、极简智能且严格符合 CAAC/ICAO 标准的个人专属电子飞行经历记录本。
 
@@ -15,6 +15,10 @@
 * **🖨️ 双格式合规导出**：
     * **PDF**：强制横屏、局方标准列头、飞行员/教员/审查员签字栏、每页合计。
     * **Excel**：SheetJS 生成，18 列完整数据，供 PC 端二次分析。
+* **🔐 Passwordless OTP Auth & UX Polish**:
+    * **OTP Flow**: Email-based verifiable login, replacing passwords for enhanced security.
+    * **Resilience**: Background state persistence and 60s rate-limiting countdown.
+    * **Account Safety**: Cross-account data collision warnings.
 
 ## 🏗️ 系统架构
 
@@ -63,6 +67,18 @@ npx wrangler deploy --env staging
 # 部署生产环境（main 分支）
 npx wrangler deploy
 ```
+
+---
+
+### 🌐 Supabase 环境变量配置 (V1.5.0 重要)
+为启用云端同步，请在根目录创建 `.env` 文件并配置以下变量：
+```bash
+EXPO_PUBLIC_SUPABASE_URL=你的Supabase项目地址
+EXPO_PUBLIC_SUPABASE_ANON_KEY=你的Anon_Key
+```
+> [!IMPORTANT]
+> 严禁在代码中硬编码 `ANON_KEY` 或泄露 `SERVICE_ROLE_KEY`。
+
 
 Worker 域名约定：
 - Staging: `https://caac-logbook-worker-staging.<your-subdomain>.workers.dev`
