@@ -1140,7 +1140,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>Version</Text>
-                <Text style={styles.infoValue}>1.4.0</Text>
+                <Text style={styles.infoValue}>1.5.0</Text>
             </View>
             <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>Compliance</Text>
