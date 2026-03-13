@@ -19,6 +19,7 @@
  *               Refactored PilotRole → PF|PM only (manipulation role).
  *               Introduced CapacityRole enum for seat-level role classification.
  *               PICUS is now expressed via CapacityRole 'PIC_US', not pilotRole.
+ *  - version 5: Added `owner_user_id` for local multi-account ownership protection.
  */
 
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
@@ -60,7 +61,7 @@ export const TABLE_LOGBOOK_RECORDS = 'logbook_records' as const;
  * reset the database — catastrophic for a pilot logbook.
  */
 export const schema = appSchema({
-    version: 4,
+    version: 5,
     tables: [
         tableSchema({
             name: TABLE_LOGBOOK_RECORDS,
@@ -278,6 +279,12 @@ export const schema = appSchema({
                  * isOptional: true so migrated records (null) remain schema-valid.
                  */
                 { name: 'uuid', type: 'string', isOptional: true },
+
+                /**
+                 * owner_user_id: local ownership binding for multi-account safety.
+                 * Nullable for pre-v5 migrated rows; runtime sync will backfill.
+                 */
+                { name: 'owner_user_id', type: 'string', isOptional: true },
 
                 // ── Soft Delete & Sync (mandatory for all records) ────────────────────
 

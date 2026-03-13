@@ -168,6 +168,10 @@ export class LogbookRecord extends Model {
      * V1.0 default: null. Phase 5 will generate RFC 4122 UUIDs on first sync upload.
      */
     @field('uuid') declare uuid: string | null;
+
+    /** Local owner binding for multi-account safety checks. */
+    @field('owner_user_id') declare ownerUserId: string | null;
+
     // ── Soft Delete & Sync ────────────────────────────────────────────────────────
 
     /**

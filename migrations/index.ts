@@ -19,6 +19,8 @@
  *   v3  → v4 : Added `pic_us_min` (PIC U/S) and `spic_min` (SPIC) duration columns.
  *              Both isOptional:true for safe migration; business layer coalesces null → 0.
  *              PilotRole is now PF|PM only; PICUS is expressed via pic_us_min > 0.
+ *   v4  → v5 : Added `owner_user_id` for local multi-account ownership protection.
+ *              isOptional:true keeps existing rows backward-compatible.
  */
 
 import { schemaMigrations, addColumns } from '@nozbe/watermelondb/Schema/migrations';
@@ -89,6 +91,23 @@ export const migrations = schemaMigrations({
                          * isOptional: true — null on pre-v4 rows coalesces to 0.
                          */
                         { name: 'spic_min', type: 'number', isOptional: true },
+                    ],
+                }),
+            ],
+        },
+
+        // ── v4 → v5 ──────────────────────────────────────────────────────────
+        {
+            toVersion: 5,
+            steps: [
+                addColumns({
+                    table: TABLE_LOGBOOK_RECORDS,
+                    columns: [
+                        /**
+                         * owner_user_id: local owner binding for account-switch safety.
+                         * Nullable for migrated legacy rows; sync layer backfills on pull/push.
+                         */
+                        { name: 'owner_user_id', type: 'string', isOptional: true },
                     ],
                 }),
             ],
