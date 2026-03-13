@@ -1,6 +1,6 @@
 {
   "name": "caac-digital-logbook",
-  "version": "0.1.0",
+  "version": "1.5.0",
   "description": "CAAC CCAR-61 compliant digital pilot logbook — offline-first React Native (Expo) app.",
   "private": true,
   "scripts": {
