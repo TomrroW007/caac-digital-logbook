@@ -16,7 +16,7 @@
  *   5. Call expo-sharing to hand off to the OS share sheet.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -44,7 +44,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Q } from '@nozbe/watermelondb';
 import withObservables from '@nozbe/with-observables';
 import * as XLSX from 'xlsx';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { database } from '../database';
 import type { LogbookRecord } from '../model/LogbookRecord';
@@ -55,23 +54,11 @@ import {
     generateImportTemplate,
     type ImportResult,
 } from '../utils/ImportService';
-import {
-    syncWithCloud,
-    checkLocalOwnerConsistency,
-    clearAllLocalLogbookRecords,
-    subscribeToAuthChanges,
-} from '../utils/SyncService';
+import { syncWithCloud } from '../utils/SyncService';
 import { isSupabaseConfigured, supabase } from '../utils/supabaseClient';
+import { subscribeToAuthChanges } from '../utils/SyncService';
 import type { Session } from '@supabase/supabase-js';
 import { crossAlert } from '../utils/alertPolyfill';
-import {
-    AUTH_OTP_CACHE_KEY,
-    OTP_RESEND_COOLDOWN_SECONDS,
-    type OtpAuthCache,
-    buildOtpAuthCache,
-    resolveOtpRestore,
-    getEmailStepButtonLabel,
-} from './settingsAuthOtpState';
 
 // ─── PDF HTML Generation ───────────────────────────────────────────────────────
 // Strategy: "Chunked Tables" (one independent DOM per page) to guarantee
@@ -509,8 +496,6 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
     const [focusedInput, setFocusedInput] = useState<'email' | 'token' | null>(null);
     const [authLoading, setAuthLoading] = useState(false);
     const [authError, setAuthError] = useState<string | null>(null);
-    const [resendCooldownSec, setResendCooldownSec] = useState(0);
-    const otpInputRef = useRef<TextInput>(null);
 
     // 订阅 Supabase 鉴权状态变化（含首次加载时恢复已有 session）
     useEffect(() => {
@@ -520,90 +505,6 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
         const unsubscribe = subscribeToAuthChanges(s => setSession(s));
         return unsubscribe;
     }, []);
-
-    const clearOtpCache = async (): Promise<void> => {
-        try {
-            await AsyncStorage.removeItem(AUTH_OTP_CACHE_KEY);
-        } catch {
-            // 缓存失败不影响主流程
-        }
-    };
-
-    const saveOtpCache = async (cacheEmail: string): Promise<void> => {
-        const payload: OtpAuthCache = buildOtpAuthCache(cacheEmail);
-        try {
-            await AsyncStorage.setItem(AUTH_OTP_CACHE_KEY, JSON.stringify(payload));
-        } catch {
-            // 缓存失败不影响主流程
-        }
-    };
-
-    const restoreOtpCache = async (): Promise<void> => {
-        try {
-            const raw = await AsyncStorage.getItem(AUTH_OTP_CACHE_KEY);
-            const restore = resolveOtpRestore(raw);
-            if (!restore.shouldRestore) {
-                await clearOtpCache();
-                return;
-            }
-
-            setEmail(restore.email);
-            setAuthStep('OTP');
-            setResendCooldownSec(restore.cooldownSec);
-        } catch {
-            await clearOtpCache();
-        }
-    };
-
-    useEffect(() => {
-        restoreOtpCache();
-    }, []);
-
-    useEffect(() => {
-        if (resendCooldownSec <= 0) return;
-        const timer = setInterval(() => {
-            setResendCooldownSec(prev => (prev <= 1 ? 0 : prev - 1));
-        }, 1000);
-        return () => clearInterval(timer);
-    }, [resendCooldownSec]);
-
-    useEffect(() => {
-        if (!showAuthModal || authStep !== 'OTP') return;
-        const timer = setTimeout(() => {
-            otpInputRef.current?.focus();
-        }, 150);
-        return () => clearTimeout(timer);
-    }, [showAuthModal, authStep]);
-
-    const handleCloseAuthModal = async (): Promise<void> => {
-        setShowAuthModal(false);
-        setAuthStep('EMAIL');
-        setAuthError(null);
-        setToken('');
-        await clearOtpCache();
-    };
-
-    const ensureOwnerSafeBeforeSync = async (userId: string): Promise<boolean> => {
-        const ownerStatus = await checkLocalOwnerConsistency(userId);
-        if (!ownerStatus.hasConflict) return true;
-
-        const confirmed = await new Promise<boolean>((resolve) => {
-            crossAlert(
-                '检测到账号切换风险',
-                `当前设备存在 ${ownerStatus.conflictRecords} 条记录属于其他账号。继续同步可能将本地数据覆盖到新账号。\n\n建议先清空本地数据后再同步。`,
-                [
-                    { text: '取消', style: 'cancel', onPress: () => resolve(false) },
-                    { text: '清空本地并继续', style: 'destructive', onPress: () => resolve(true) },
-                ],
-            );
-        });
-
-        if (!confirmed) return false;
-
-        const cleared = await clearAllLocalLogbookRecords();
-        crossAlert('本地数据已清空', `已清空 ${cleared} 条本地记录，将继续同步当前账号数据。`);
-        return true;
-    };
 
     // ── PDF Export ───────────────────────────────────────────────────────────
     const handlePdfExport = async () => {
@@ -793,10 +694,6 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
     // ── 云端同步 ──────────────────────────────────────────────────────────────
     // 1. 发送 6 位验证码到邮箱
     const handleSendOTP = async () => {
-        if (resendCooldownSec > 0) {
-            setAuthError(`请求过于频繁，请 ${resendCooldownSec}s 后再试`);
-            return;
-        }
         if (!email.trim()) return setAuthError('请输入邮箱');
         const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
         if (!emailRegex.test(email.trim())) return setAuthError('邮箱格式不正确');
@@ -804,20 +701,12 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
         setAuthLoading(true);
         setAuthError(null);
         try {
-            const cleanEmail = email.trim();
             const { error } = await supabase.auth.signInWithOtp({
-                email: cleanEmail,
-                options: {
-                    shouldCreateUser: true, // 允许新用户直接通过验证码创建账号
-                    emailRedirectTo: undefined, // 强制 OTP Code 模式而非 Magic Link 跳转
-                },
+                email: email.trim(),
+                options: { shouldCreateUser: true }, // 允许新用户直接通过验证码创建账号
             });
             if (error) throw error;
-            setEmail(cleanEmail);
             setAuthStep('OTP'); // 切换至验证码输入界面
-            setToken('');
-            setResendCooldownSec(OTP_RESEND_COOLDOWN_SECONDS);
-            await saveOtpCache(cleanEmail);
         } catch (err: any) {
             setAuthError(err.message);
         } finally {
@@ -839,25 +728,11 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             });
             if (error) throw error;
 
-            const { data: { user }, error: userErr } = await supabase.auth.getUser();
-            if (userErr || !user) {
-                throw new Error(userErr?.message ?? '登录状态获取失败');
-            }
-
-            const safeToSync = await ensureOwnerSafeBeforeSync(user.id);
-
             // 验证成功：清理状态并关闭弹窗
             setShowAuthModal(false);
             setAuthStep('EMAIL');
             setEmail('');
             setToken('');
-            setAuthError(null);
-            await clearOtpCache();
-
-            if (!safeToSync) {
-                setSyncMsg('Warning: 检测到账号切换，已取消自动同步');
-                return;
-            }
             // 自动触发云端同步逻辑
             handleSync();
         } catch (err: any) {
@@ -902,19 +777,6 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
             );
             return;
         }
-
-        const { data: { user }, error: userErr } = await supabase.auth.getUser();
-        if (userErr || !user) {
-            crossAlert('请先登录', userErr?.message ?? '当前账号未登录，无法执行云同步。');
-            return;
-        }
-
-        const safeToSync = await ensureOwnerSafeBeforeSync(user.id);
-        if (!safeToSync) {
-            setSyncMsg('Warning: 因账号切换风险，已取消同步');
-            return;
-        }
-
         setSyncing(true);
         setSyncMsg(null);
         try {
@@ -1174,7 +1036,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                 visible={showAuthModal}
                 transparent
                 animationType="slide"
-                onRequestClose={handleCloseAuthModal}
+                onRequestClose={() => { setShowAuthModal(false); setAuthStep('EMAIL'); setAuthError(null); }}
             >
                 <KeyboardAvoidingView
                     style={styles.modalOverlay}
@@ -1205,10 +1067,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                                 autoCapitalize="none"
                                 autoCorrect={false}
                                 value={email}
-                                onChangeText={(v) => {
-                                    setEmail(v);
-                                    if (authError) setAuthError(null);
-                                }}
+                                onChangeText={setEmail}
                                 onFocus={() => setFocusedInput('email')}
                                 onBlur={() => setFocusedInput(null)}
                                 testID="input-email"
@@ -1225,13 +1084,9 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
                                 keyboardType="number-pad"
                                 maxLength={6}
                                 value={token}
-                                onChangeText={(v) => {
-                                    setToken(v);
-                                    if (authError) setAuthError(null);
-                                }}
+                                onChangeText={setToken}
                                 onFocus={() => setFocusedInput('token')}
                                 onBlur={() => setFocusedInput(null)}
-                                ref={otpInputRef}
                                 testID="input-otp-token"
                             />
                         )}
@@ -1245,20 +1100,15 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
                         {/* 主操作按钮 */}
                         <TouchableOpacity
-                            style={[
-                                styles.authPrimaryBtn,
-                                (authLoading || (authStep === 'EMAIL' && resendCooldownSec > 0)) && styles.exportCardDisabled,
-                            ]}
+                            style={[styles.authPrimaryBtn, authLoading && styles.exportCardDisabled]}
                             onPress={authStep === 'EMAIL' ? handleSendOTP : handleVerifyOTP}
-                            disabled={authLoading || (authStep === 'EMAIL' && resendCooldownSec > 0)}
+                            disabled={authLoading}
                             testID="btn-auth-submit"
                         >
                             {authLoading
                                 ? <ActivityIndicator size="small" color="#fff" />
                                 : <Text style={styles.authPrimaryBtnText}>
-                                    {authStep === 'EMAIL'
-                                        ? getEmailStepButtonLabel(resendCooldownSec)
-                                        : '验证并登录'}
+                                    {authStep === 'EMAIL' ? '获取验证码' : '验证并登录'}
                                 </Text>
                             }
                         </TouchableOpacity>
@@ -1276,7 +1126,7 @@ const SettingsScreenBase: React.FC<SettingsProps> = ({ logbooks }) => {
 
                         <TouchableOpacity
                             style={styles.modalCancelBtn}
-                            onPress={handleCloseAuthModal}
+                            onPress={() => { setShowAuthModal(false); setAuthStep('EMAIL'); setAuthError(null); }}
                             testID="btn-auth-cancel"
                         >
                             <Text style={styles.modalCancelText}>取消</Text>
