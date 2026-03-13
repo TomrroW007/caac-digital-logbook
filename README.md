@@ -23,7 +23,7 @@
 * Supabase 免费账号 (用于开启云端同步)
 
 ### 安装与运行
-\`\`\`bash
+```bash
 # 1. 克隆代码并安装依赖
 git clone https://github.com/your-repo/caac-digital-logbook.git
 cd caac-digital-logbook
@@ -35,7 +35,7 @@ npm install
 
 # 3. 启动开发服务器
 npx expo start
-\`\`\`
+```
 
 ## 🛠 技术栈
 * **前端:** React Native / Expo, React Navigation
